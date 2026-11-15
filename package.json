@@ -1,0 +1,172 @@
+{
+  "name": "@joe-broadhead/opencode-specter",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Unofficial OpenCode plugin for Specter",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "specter"
+  ],
+  "homepage": "https://github.com/joe-broadhead/opencode-specter#readme",
+  "bugs": {
+    "url": "https://github.com/joe-broadhead/opencode-specter/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joe-broadhead/opencode-specter.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./dist/index.js"
+    },
+    "./tui": {
+      "default": "./dist/tui.js"
+    },
+    "./icon.svg": "./assets/icon.svg",
+    "./icon-128.png": "./assets/icon-128.png",
+    "./icon-256.png": "./assets/icon-256.png"
+  },
+  "files": [
+    "dist",
+    "assets/icon.svg",
+    "assets/icon-128.png",
+    "assets/icon-256.png",
+    "skills",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "typecheck": "node scripts/check.mjs typecheck",
+    "build": "node scripts/check.mjs build",
+    "test": "node scripts/check.mjs unit",
+    "conformance": "node scripts/check.mjs conformance",
+    "test:kit": "node scripts/check.mjs kit",
+    "test:host": "node scripts/check.mjs host",
+    "test:pack": "node scripts/check.mjs pack",
+    "lint": "node scripts/check-forbidden.mjs --self-test && node scripts/check.mjs forbidden copies",
+    "icons": "node scripts/check.mjs icons",
+    "capture": "node scripts/capture-tools.mjs"
+  },
+  "devDependencies": {
+    "@babel/core": "7.29.7",
+    "@babel/preset-typescript": "7.27.1",
+    "@opencode/client": "2.2.3",
+    "@opencode/plugin": "2.2.3",
+    "@opencode/sdk": "2.2.3",
+    "@opentui/core": "0.8.0",
+    "@opentui/solid": "0.8.0",
+    "@types/bun": "1.4.4",
+    "@types/node": "24.19.2",
+    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.1.0",
+    "babel-preset-solid": "1.9.16",
+    "esbuild": "0.28.2",
+    "solid-js": "1.9.18",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5",
+    "zod": "4.6.7"
+  },
+  "opencode": {
+    "host": ">=2.2.3 <2.4.0",
+    "icons": [
+      {
+        "src": "assets/icon.svg",
+        "mimeType": "image/svg+xml",
+        "sizes": [
+          "any"
+        ]
+      },
+      {
+        "src": "assets/icon-128.png",
+        "mimeType": "image/png",
+        "sizes": [
+          "128x128"
+        ]
+      },
+      {
+        "src": "assets/icon-256.png",
+        "mimeType": "image/png",
+        "sizes": [
+          "256x256"
+        ]
+      }
+    ],
+    "vendor": {
+      "id": "specter",
+      "name": "Specter",
+      "domain": "tryspecter.com"
+    }
+  },
+  "jelly": {
+    "title": "Specter",
+    "summary": "Specter deal data: companies, their profiles and signals.",
+    "icon": "assets/icon.svg",
+    "tools": [],
+    "skills": [
+      "specter",
+      "specter-write"
+    ],
+    "rpc": [],
+    "views": [],
+    "signIns": [
+      {
+        "id": "account",
+        "label": "Specter account",
+        "server": "specter",
+        "group": "specter"
+      },
+      {
+        "id": "specter",
+        "label": "Specter",
+        "integration": "specter",
+        "group": "specter"
+      }
+    ],
+    "contributes": {
+      "homeFeeds": [],
+      "homeWidgets": [],
+      "workKinds": [],
+      "settings": [
+        {
+          "key": "access",
+          "label": "Access",
+          "type": "string",
+          "description": "How much the plugin's tools may do. Generates default rules for agents with a base allow; calls that spend Specter credits count as changes.",
+          "choices": [
+            {
+              "value": "all",
+              "label": "Allowed",
+              "description": "Every tool runs without asking, reads and changes alike."
+            },
+            {
+              "value": "ask-changes",
+              "label": "Ask before changes",
+              "description": "Reads run without asking. Each change asks you first."
+            },
+            {
+              "value": "read-only",
+              "label": "Read only",
+              "description": "Reads run. Changes never run."
+            }
+          ],
+          "default": "all"
+        },
+        {
+          "key": "requestTimeoutMs",
+          "label": "Request time limit",
+          "type": "number",
+          "integer": true,
+          "min": 5000,
+          "max": 120000,
+          "default": 30000,
+          "description": "How long one request to Specter's REST API can take, in milliseconds: 5 seconds to 2 minutes. The default is 30 seconds."
+        }
+      ]
+    }
+  }
+}
