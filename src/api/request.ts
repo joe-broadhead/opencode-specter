@@ -134,7 +134,7 @@ export async function request(input: RestInput, deps: RequestDeps): Promise<ApiO
     } catch (error) {
       // A network failure or a timeout on a read is retried; anything else, or the last attempt, is reported.
       if (!retryable || attempt >= MAX_ATTEMPTS || !(error instanceof SpecterPluginError) || (error.code !== "API_UNREACHABLE" && error.code !== "API_TIMEOUT")) throw error
-      await sleep(backoff(attempt, undefined, random), deps.signal)
+      await sleep(jitter(attempt, random), deps.signal)
       continue
     }
     const wait = retryable && attempt < MAX_ATTEMPTS && (response.status === 429 || response.status >= 500) ? backoff(attempt, response.headers.get("retry-after"), random) : undefined
@@ -158,6 +158,11 @@ export function backoff(attempt: number, retryAfter: string | null | undefined, 
     const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retryAfter) - now
     if (Number.isFinite(ms)) return ms > MAX_DELAY_MS ? undefined : Math.max(0, ms)
   }
+  return jitter(attempt, random)
+}
+
+/** Exponential backoff with full jitter, never above MAX_DELAY_MS. */
+export function jitter(attempt: number, random: () => number = Math.random): number {
   return Math.round(random() * Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** (attempt - 1)))
 }
 

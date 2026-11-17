@@ -12,7 +12,7 @@ describe("the plugin in a host", () => {
   test("loads, registers the specter server, inserts the default rules and answers status with no upstream call", async () => {
     const host = await startHost()
     try {
-      expect(await pluginState(host)).toBe("active")
+      expect(await pluginState(host)).toEqual({ status: "active" })
       await until("the specter server is listed", () => specterServer(host))
       const rules = (await agentRules(host)).get("build") ?? []
       const base = rules.findIndex((rule) => rule.action === "*" && rule.resource === "*" && rule.effect === "allow")
@@ -61,13 +61,13 @@ describe("the plugin in a host", () => {
   test("refuses an unknown option, and a host outside the range", async () => {
     const typo = await startHost({ options: { acess: "all" } })
     try {
-      expect(await pluginState(typo)).not.toBe("active")
+      expect(await pluginState(typo)).toMatchObject({ status: "failed", error: expect.stringContaining("OPTIONS_INVALID") })
     } finally {
       await typo.close()
     }
     const old = await startHost({ version: "2.1.0" })
     try {
-      expect(await pluginState(old)).not.toBe("active")
+      expect(await pluginState(old)).toMatchObject({ status: "failed", error: expect.stringContaining("HOST_UNTESTED") })
     } finally {
       await old.close()
     }

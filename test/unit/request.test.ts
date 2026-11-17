@@ -2,7 +2,7 @@
 // invented, because the tools that call real endpoints arrive in Slice 7.
 import { describe, expect, it } from "vitest"
 import { API_KEY_HEADER, REST_BASE } from "../../src/constants.js"
-import { backoff, MAX_ATTEMPTS, MAX_DELAY_MS, MAX_INLINE_BYTES, request, type RequestDeps, restTarget, type RestInput } from "../../src/api/request.js"
+import { backoff, jitter, MAX_ATTEMPTS, MAX_DELAY_MS, MAX_INLINE_BYTES, request, type RequestDeps, restTarget, type RestInput } from "../../src/api/request.js"
 import { DUMMY_KEY } from "./fake.js"
 
 type Sent = { url: string; method: string; headers: Record<string, string> }
@@ -68,6 +68,14 @@ describe("retries (D6)", () => {
     expect(output).toMatchObject({ ok: true, attempts: 3 })
     expect(sent).toHaveLength(3)
     expect(waits[0]).toBe(2_000)
+  })
+
+  it("retry a free read after a network failure, with jittered backoff that never passes the cap", async () => {
+    const { sent, waits, deps } = transport([new Error("socket hang up"), json({ ok: true })])
+    expect(await request(read, deps)).toMatchObject({ ok: true, attempts: 2 })
+    expect(sent).toHaveLength(2)
+    expect(waits).toEqual([jitter(1, () => 0.5)])
+    for (const attempt of [1, 2, 10, 40]) expect(jitter(attempt, () => 1)).toBeLessThanOrEqual(MAX_DELAY_MS)
   })
 
   it("never retry a spend call, whatever the failure", async () => {
