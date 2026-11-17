@@ -3,6 +3,7 @@
 // carries no zod. The TypeScript type is written out by hand, and isStatus checks a value against the same rules.
 import { Rpc } from "@opencode/plugin/rpc"
 import { ACCESS_VALUES, type Access, DISPLAY_NAME, PLUGIN_ID, SERVER_NAME } from "./constants.js"
+import { MCP_CREDIT_USE } from "./costs.js"
 
 /** The shared status labels' machine names. */
 export const STATES = ["connected", "sign_in_required", "connecting", "failed", "disabled", "not_configured", "conflict"] as const
@@ -181,8 +182,8 @@ export function statusRows(status: Status): StatusRow[] {
     { label: "Team API key", value: describeKey(status.key) },
     // The two sign-ins are separate: the MCP sign-in is per person, the key is the team's (SPEC.md §5).
     { label: "Sign-ins", value: "the MCP sign-in is yours alone; the team API key is shared, and every call with it spends from one credit pool" },
-    // TODO(Slice 0): whether MCP calls spend credits is unmeasured.
-    { label: "MCP credit use", value: "not yet known" },
+    // From Specter's public docs (costs.ts); Slice 0 confirms it live.
+    { label: "MCP credit use", value: MCP_CREDIT_USE },
     { label: "Access", value: ACCESS_TEXT[status.access] },
     { label: "Tools", value: describeTools(status.tools) },
     { label: "Agents without default rules", value: status.unguardedAgents.length > 0 ? status.unguardedAgents.join(", ") : NONE },

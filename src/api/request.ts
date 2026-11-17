@@ -4,14 +4,18 @@
 // within the REST base, and refuses one to another host or to plain HTTP. Bodies are read up to a cap, and results are
 // capped for inline display.
 //
-// Retries (D6) are new to the family: a `read` call (free) is retried on 429 and 5xx and on a network failure, with
-// backoff and jitter that honours Retry-After; a `spend` call is never retried, because Specter may have accepted and
-// charged the first attempt, and a retry could charge twice. A `write` call is not retried either: it is not known to
-// be idempotent. No endpoint is called yet: the tools that call this arrive in Slice 7.
+// Retries (D6) are new to the family: a `read` call (free) is retried on 429 and 5xx and on a network failure; a
+// `spend` call is never retried, because Specter may have accepted and charged the first attempt, and a retry could
+// charge twice. A `write` call is not retried either: it is not known to be idempotent. Specter's own rules, from its
+// public docs and unverified live (https://api.tryspecter.com/api-ref/errors.md): retry only 429 and 5xx, never 400,
+// 401, 403, 404 or 422, stop on 402; on 429 wait for X-RateLimit-Reset (seconds); on 5xx back off exponentially from
+// about a second. A 503 that names a wait in Retry-After gets that wait. Failures are mapped by specter-error.ts.
+// The key check (key-check.ts) calls the free credit balance; the tools that call this arrive in Slice 7.
 import { API_KEY_HEADER, REST_BASE } from "../constants.js"
 import { SpecterPluginError } from "../errors.js"
 import { withoutSecret } from "../redact.js"
 import type { ToolClass } from "../specter-tools.js"
+import { requestIdOf, headerNumber, type SpecterError, specterErrorOf } from "./specter-error.js"
 
 export type Fetch = (url: string, init: RequestInit) => Promise<Response>
 
@@ -23,8 +27,9 @@ const MAX_REDIRECTS = 5
 const REDIRECTS = new Set([301, 302, 303, 307, 308])
 /** Attempts for a retryable call, the first included. */
 export const MAX_ATTEMPTS = 3
-const BASE_DELAY_MS = 500
-/** The longest wait between attempts, Retry-After included; a longer Retry-After ends the retries. */
+/** The first backoff step: Specter suggests starting at about a second. */
+const BASE_DELAY_MS = 1_000
+/** The longest wait between attempts, a named wait included; a longer named wait ends the retries. */
 export const MAX_DELAY_MS = 30_000
 const TRUST = { specterContent: "untrusted" } as const
 
@@ -60,8 +65,14 @@ export interface ApiOutput {
   readonly data?: unknown
   readonly contentType?: string
   readonly truncated: boolean
-  /** TODO(Slice 0): Specter's rate-limit headers are unverified; `x-ratelimit-*` is assumed until a response shows them. */
-  readonly rateLimit?: { readonly limit: number; readonly remaining: number; readonly reset?: string }
+  /** X-RateLimit-Limit, -Remaining and -Reset (seconds), as Specter's docs name them; unverified live. */
+  readonly rateLimit?: { readonly limit: number; readonly remaining: number; readonly resetSeconds?: number }
+  /** X-CreditLimit-Limit, -Remaining and -Reset (seconds), which Specter's docs say come on 402 and 429. */
+  readonly credits?: { readonly limit: number; readonly remaining: number; readonly resetSeconds?: number }
+  /** X-Request-ID, which Specter's support asks for in a report. */
+  readonly requestId?: string
+  /** For a failure: the plugin's code and words, and Specter's `errorCode` when it sent one. */
+  readonly error?: { readonly code: SpecterError["code"]; readonly message: string; readonly errorCode?: string }
   readonly attempts: number
   readonly nextStep?: string
   readonly trust: typeof TRUST
@@ -137,7 +148,7 @@ export async function request(input: RestInput, deps: RequestDeps): Promise<ApiO
       await sleep(jitter(attempt, random), deps.signal)
       continue
     }
-    const wait = retryable && attempt < MAX_ATTEMPTS && (response.status === 429 || response.status >= 500) ? backoff(attempt, response.headers.get("retry-after"), random) : undefined
+    const wait = retryable && attempt < MAX_ATTEMPTS && (response.status === 429 || response.status >= 500) ? retryWait(response, attempt, random) : undefined
     if (wait !== undefined) {
       await response.body?.cancel().catch(() => undefined)
       await sleep(wait, deps.signal)
@@ -145,6 +156,20 @@ export async function request(input: RestInput, deps: RequestDeps): Promise<ApiO
     }
     return finish(response, await readBody(response, input.method, deps.key), attempt, input.class)
   }
+}
+
+/**
+ * The wait before retrying a 429 or a 5xx: on a 429, X-RateLimit-Reset (seconds, possibly fractional), as Specter's
+ * docs say; else Retry-After, which Specter's docs name on a 503; else backoff with jitter. Undefined when the named wait
+ * is longer than MAX_DELAY_MS, which ends the retries.
+ */
+export function retryWait(response: Pick<Response, "status" | "headers">, attempt: number, random: () => number = Math.random): number | undefined {
+  const reset = response.status === 429 ? headerNumber(response.headers, "x-ratelimit-reset") : undefined
+  if (reset !== undefined) {
+    const ms = Math.ceil(reset * 1000)
+    return ms > MAX_DELAY_MS ? undefined : ms
+  }
+  return backoff(attempt, response.headers.get("retry-after"), random)
 }
 
 /**
@@ -256,20 +281,25 @@ async function readCapped(response: Response, limit: number): Promise<{ bytes: U
   return { bytes, truncated }
 }
 
-function rateLimitOf(response: Response): ApiOutput["rateLimit"] {
-  const limit = Number(response.headers.get("x-ratelimit-limit"))
-  const remaining = Number(response.headers.get("x-ratelimit-remaining"))
-  if (!response.headers.has("x-ratelimit-remaining") || !Number.isFinite(limit) || !Number.isFinite(remaining)) return undefined
-  const reset = response.headers.get("x-ratelimit-reset")
-  return { limit, remaining, ...(reset ? { reset } : {}) }
+/** A `<prefix>-Limit`, `-Remaining` and `-Reset` header trio, as numbers. */
+function meterOf(headers: Headers, prefix: string): ApiOutput["rateLimit"] {
+  const limit = headerNumber(headers, `${prefix}-limit`)
+  const remaining = headerNumber(headers, `${prefix}-remaining`)
+  if (limit === undefined || remaining === undefined) return undefined
+  const resetSeconds = headerNumber(headers, `${prefix}-reset`)
+  return { limit, remaining, ...(resetSeconds !== undefined ? { resetSeconds } : {}) }
 }
 
 /** The output for a response: status, rate limit, a capped body, and a next step for failures. */
 function finish(response: Response, body: Body, attempts: number, toolClass: ToolClass): ApiOutput {
-  const rateLimit = rateLimitOf(response)
+  const rateLimit = meterOf(response.headers, "x-ratelimit")
+  const credits = meterOf(response.headers, "x-creditlimit")
+  const requestId = requestIdOf(response.headers)
+  // The error object is read before the body is capped, so a long result never hides it.
+  const failure = response.ok ? undefined : specterErrorOf(response.status, body.data, response.headers, toolClass)
   const capped = body.data === undefined ? undefined : capInline(body.data)
   const truncated = body.truncated || capped?.truncated === true
-  const nextStep = failureStep(response, toolClass) ?? (truncated ? "The result was cut at 100,000 bytes. Narrow the query." : undefined)
+  const nextStep = failure?.next ?? (truncated ? "The result was cut at 100,000 bytes. Narrow the query." : undefined)
   return {
     ok: response.ok,
     status: response.status,
@@ -277,6 +307,9 @@ function finish(response: Response, body: Body, attempts: number, toolClass: Too
     ...(body.contentType ? { contentType: body.contentType } : {}),
     truncated,
     ...(rateLimit ? { rateLimit } : {}),
+    ...(credits ? { credits } : {}),
+    ...(requestId ? { requestId } : {}),
+    ...(failure ? { error: { code: failure.code, message: failure.message, ...(failure.errorCode ? { errorCode: failure.errorCode } : {}) } } : {}),
     attempts,
     ...(nextStep ? { nextStep } : {}),
     trust: TRUST,
@@ -284,29 +317,12 @@ function finish(response: Response, body: Body, attempts: number, toolClass: Too
 }
 
 /**
- * The next step for a failed status. TODO(Slice 6): Specter's error object and its status codes are unverified
- * (Slice 0 records them); the Specter error mapper, on opencode-tavily's src/tavily-error.ts, replaces these generic
- * steps, and adds a credits-exhausted code only if Specter's error shape tells that case apart.
+ * An output that failed, as the plugin's error: its code (KEY_REJECTED, OUT_OF_CREDITS, DAILY_CREDIT_CAP_REACHED or
+ * UPSTREAM_ERROR), the plugin's words with Specter's request ID, and the next step; never Specter's own message.
  */
-function failureStep(response: Response, toolClass: ToolClass): string | undefined {
-  if (response.ok) return undefined
-  if (response.status === 401 || response.status === 403) return "Specter rejected the team API key. Run /connect, choose Specter and paste a current key, then run /specter-status."
-  if (response.status === 429) {
-    const wait = Number(response.headers.get("retry-after"))
-    return `Specter's rate limit stopped this call. Wait ${Number.isFinite(wait) && wait > 0 ? `${wait} seconds` : "a minute"}, then try again, and make fewer calls at once.`
-  }
-  if (response.status >= 500) {
-    return toolClass === "spend"
-      ? "Specter had a problem on its side. This call was not retried, because it may already have spent credits: check before you call it again."
-      : "Specter had a problem on its side. Wait a minute, then try again."
-  }
-  if (response.status === 404) return "Specter answers 404 for a wrong path or an id it does not know. Check the input."
-  return "Check the input against the tool's schema, then call it again."
-}
-
-/** An output that failed, as the plugin's error: the status and the next step, never the body. */
 export function upstreamError(output: ApiOutput): SpecterPluginError {
-  return new SpecterPluginError("UPSTREAM_ERROR", `Specter answered with HTTP ${output.status}.`, output.nextStep ?? "Run /specter-status, then try again.")
+  const id = output.requestId ? ` Specter request ID: ${output.requestId}.` : ""
+  return new SpecterPluginError(output.error?.code ?? "UPSTREAM_ERROR", `${output.error?.message ?? `Specter answered with HTTP ${output.status}.`}${id}`, output.nextStep ?? "Run /specter-status, then try again.")
 }
 
 /** Keeps the inline result under MAX_INLINE_BYTES: whole list items where it can, else a cut text. */

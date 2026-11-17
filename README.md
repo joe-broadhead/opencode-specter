@@ -129,7 +129,10 @@ The plugin's errors start with a code and end with one next step:
 | `API_REDIRECT_LOOP` | Specter redirected more than 5 times | Try again later. |
 | `API_REDIRECT_INSECURE` | Specter redirected to a non-HTTPS address | Try again later. |
 | `API_REDIRECT_OFF_HOST` | Specter redirected a read outside its REST API | Try again later. |
-| `UPSTREAM_ERROR` | Specter answered with an error status | The one in the message: for 401 or 403, replace the key; for 429, wait; for 5xx on a call that spends credits, check before you call it again. |
+| `KEY_REJECTED` | Specter refused the team API key (401, or a 403 that refuses the key itself) | Run `/connect`, choose **Specter** and paste a current key from Specter's [API Console](https://app.tryspecter.com/settings/api-console). |
+| `OUT_OF_CREDITS` | Specter answered 402: the team's credit budget for the period is spent | Wait for the period to renew, or ask Specter for more credits. Calls that spend credits fail until then. |
+| `DAILY_CREDIT_CAP_REACHED` | Specter answered 402: the organisation's daily credit limit is reached | Wait until 00:00 UTC (the message gives the wait when Specter sends it); an admin can ask Specter to change the limit. |
+| `UPSTREAM_ERROR` | Specter answered with another error status | The one in the message: for 403, the team's plan does not include that endpoint; for 429, wait the seconds it names; for 5xx on a call that spends credits, check before you call it again. The message carries Specter's request ID for a report to api-support@tryspecter.com. |
 
 A script's errors from the tools RPC have their own codes, listed in [Scripting](docs/scripting.md#errors).
 
