@@ -6,7 +6,7 @@ import { KEY_INTEGRATION_ID, MCP_URL } from "../../src/constants.js"
 import { defaultRules } from "../../src/permissions.js"
 import { isStatus } from "../../src/rpc.js"
 import { DUMMY_KEY } from "../unit/fake.js"
-import { authorizationServer, SCOPES, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
+import { AUTHORIZATION_SERVER, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
 import { agentRules, cleanup, pluginState, specterServer, startHost, status, until } from "./harness.js"
 
 /** A GET over plain HTTP, outside the fetch router, which allows no loopback but the fake and follows no redirect. */
@@ -106,10 +106,11 @@ describe("the plugin in a host", () => {
       const { data: attempt } = await oauth.connect({ integrationID, methodID: (integration as unknown as { methods: { id: string }[] }).methods[0]!.id, location: host.location })
       // The browser's part: Specter's authorization endpoint (here the fake, at Specter's address) consents and
       // redirects to OpenCode's loopback callback.
-      expect(attempt.url.startsWith(authorizationServer(SPECTER_MCP_ORIGIN).authorization_endpoint)).toBe(true)
+      expect(attempt.url.startsWith(AUTHORIZATION_SERVER.authorization_endpoint)).toBe(true)
       const consent = await get(attempt.url.replace(SPECTER_MCP_ORIGIN, host.fake.origin))
       expect(consent.status).toBe(302)
       expect(consent.location).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost):\d+\//)
+      expect(new URL(consent.location!).searchParams.get("iss")).toBe(AUTHORIZATION_SERVER.issuer)
       await get(consent.location!)
       const signedIn = await until("the server connects and OpenCode lists its tools", async () => {
         const answer = await status(host)
@@ -126,7 +127,9 @@ describe("the plugin in a host", () => {
       const [signIn] = host.fake.signIns
       expect(signIn!.registration).toBe(route)
       expect(signIn!.codeChallengeMethod).toBe("S256")
-      expect(signIn!.scope.split(" ").filter((scope) => (SCOPES as readonly string[]).includes(scope)).length).toBeGreaterThan(0)
+      // The scope and resource Specter's metadata names, nothing more.
+      expect(signIn!.scope).toBe("openid")
+      expect(signIn!.resource).toBe(PROTECTED_RESOURCE.resource)
       expect(host.fake.tokens[0]).toMatchObject({ grant: "authorization_code", verifier: true })
       // The MCP sign-in never touches the REST API or the team key.
       expect(host.fake.requests.filter((request) => request.path.startsWith("/api/") || request.apiKey)).toEqual([])

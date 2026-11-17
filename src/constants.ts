@@ -8,9 +8,9 @@ export const SERVER_NAME = "specter"
 export const DISPLAY_NAME = "Specter"
 /**
  * Specter's hosted MCP server (streamable HTTP). Its sign-in is per user and separate from the REST key. Write it
- * nowhere else: the pack and host tests point the built plugin at a fake by replacing it.
- * TODO(Slice 1, B2): the OAuth flow (dynamic client registration, client metadata document or an admin step) is not
- * known. Per D3 the server ships in v0.0.1 only if its sign-in completes in OpenCode with no org-admin step.
+ * nowhere else: the pack and host tests point the built plugin at a fake by replacing it. Its published OAuth metadata
+ * offers PKCE and both client ID metadata documents and dynamic client registration, and the host tests sign in
+ * against a fake that serves that metadata verbatim; a sign-in with a live Specter account is not yet confirmed.
  */
 export const MCP_URL = "https://mcp.tryspecter.com/mcp"
 /** Specter's REST API base. The team key is sent only to this origin, and only under this path. */

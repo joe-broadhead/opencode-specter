@@ -15,7 +15,7 @@ server over OAuth and the plugin's own REST tools, all under the `specter_` pref
 | `src/tool-spec.ts` | The plugin's own tools as specs (opencode-gws's pattern): one spec feeds the model's tool and the scripts' method. |
 | `src/tools.ts` | The namespace description, `OWN_TOOLS`, `isServerTool`, and the count of the server's tools. |
 | `src/credential.ts` | The `specter` key integration, and reading the key at call time. |
-| `src/key-check.ts` | The key check: one free `GET /organization/credits` per key, read as Specter's public docs describe the answers. |
+| `src/key-check.ts` | The key check: one free `GET /organization/credits` per key, again after 10 minutes, read as Specter's public docs describe the answers; any 403 but `NOT_PERMITTED` or a key refusal is "not confirmed". |
 | `src/api/request.ts` | The REST client (opencode-github's structure). No tool calls it yet. |
 | `src/api/specter-error.ts` | Specter's error object, mapped to the plugin's codes, from Specter's public Errors page. |
 | `src/costs.ts` | Specter's published costs, with their sources (`docs/costs.md`). Decides no permission. |

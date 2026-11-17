@@ -169,6 +169,18 @@ describe("package tarball", () => {
     for (const file of ["index.js", "tui.js"]) expect(relativeImports(readFileSync(join(dist, file), "utf8"))).toEqual([])
   }, 300_000)
 
+  // The TUI bundle is not minified, so its comments ship: none may name the plan behind the code.
+  test("dist carries no plan references: no TODO, plan file, plan step or decision number", () => {
+    const dist = join(installedPackage(true), "dist")
+    // Decision numbers such as B2 or D3 are looked for in comments only: a minified name can look the same.
+    const comments = (text: string) => (text.match(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g) ?? []).join("\n")
+    for (const file of ["index.js", "tui.js"]) {
+      const text = readFileSync(join(dist, file), "utf8")
+      const found = [...(text.match(/\bTODO\b|SPEC\.md|\bSlice \d+/g) ?? []), ...(comments(text).match(/\b[BD]\d+\b/g) ?? [])]
+      expect({ file, found }).toEqual({ file, found: [] })
+    }
+  }, 300_000)
+
   test("dist imports only modules the host provides", () => {
     const dist = join(installedPackage(true), "dist")
     expect(foreign(join(dist, "index.js"), SERVER_HOST_MODULES)).toEqual([])

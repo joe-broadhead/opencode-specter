@@ -38,8 +38,8 @@ export function shapeInput(_method: string, input: unknown, _call: ShapeCall): u
 }
 
 /**
- * What the model path's `execute.after` hooks do to a result. None yet. TODO(Slice 6): the Specter error mapper, on
- * opencode-tavily's pattern, applied here and in an `execute.after` hook.
+ * What the model path's `execute.after` hooks do to a result. None: src/api/specter-error.ts maps the REST API's error
+ * object, but how Specter's MCP server reports a failure in a tool result is not yet captured, so nothing here maps it.
  */
 export function shapeResult(_method: string, result: McpResult, _call: ShapeCall): McpResult {
   return result

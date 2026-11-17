@@ -28,7 +28,7 @@ export type StatusDeps = {
   readonly tools: () => ServerTools
   readonly key: () => Promise<SpecterKey | undefined>
   /** The last check of the key, never a new request: status makes no upstream call. */
-  readonly keyCheck: () => KeyCheck
+  readonly keyCheck: (key: string) => KeyCheck
   readonly skills: readonly SkillPath[]
   readonly problems: () => readonly string[]
   /** Whether any of the plugin's own tools needs the team key. None does until Slice 7. */
@@ -48,7 +48,7 @@ export async function computeStatus(ctx: StatusContext, deps: StatusDeps): Promi
   const unguarded = unguardedAgents(agents.data, deps.access)
   const shadowed = shadowedSkills(deps.skills, listed ?? [])
   const problems = deps.problems()
-  const check = key ? deps.keyCheck() : "unchecked"
+  const check = key ? deps.keyCheck(key.key) : "unchecked"
   return {
     version: PLUGIN_VERSION,
     state,
@@ -92,8 +92,8 @@ function connectionStep(state: Status["state"]): string | undefined {
     case "connected":
       return undefined
     case "sign_in_required":
-      // TODO(Slice 4, B2): the sign-in flow is unverified, and may need an admin step once B2 is answered. Slice 4 may
-      // also name the server's OAuth integration "Specter account" in /connect, as opencode-tavily does.
+      // Specter documents no admin step for this sign-in; the host tests complete it against a fake. Not yet
+      // confirmed with a live account.
       return `Open /mcps, choose ${SERVER_NAME} and sign in.`
     case "connecting":
       return `${DISPLAY_NAME} is still starting. Check again in a few seconds.`
@@ -110,6 +110,9 @@ function connectionStep(state: Status["state"]): string | undefined {
 
 function keyStep(connected: boolean, check: KeyCheck, needsKey: boolean): string | undefined {
   if (connected && check === "rejected") return `Run /connect, choose ${DISPLAY_NAME} and paste a current team API key.`
+  if (connected && check === "unconfirmed") {
+    return `${DISPLAY_NAME}'s answer neither accepted nor refused the team API key. Run /specter-status again in a few minutes; if it stays, check the key in ${DISPLAY_NAME}'s API Console.`
+  }
   if (!connected && needsKey) return `Run /connect, choose ${DISPLAY_NAME} and paste the team API key.`
   return undefined
 }
