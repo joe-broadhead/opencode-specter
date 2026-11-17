@@ -106,7 +106,7 @@
     "title": "Specter",
     "summary": "Specter deal data: companies, their profiles and signals.",
     "icon": "assets/icon.svg",
-    "cost": "Specter bills in credits from the team's one pool and publishes no price per credit. Each person gets 100 MCP tool calls a day; past that, calls spend team credits only if a Specter admin allows it. Calls with the team key spend credits per result; checking the key is free.",
+    "cost": "Specter bills in credits from the team's plan, and publishes no price per credit: get_company and saved_search_results cost 1 credit per result, the saved-search source 1 per company it lists, and the key check is free. 100 MCP calls a day per person, then team credits only if an admin allows it.",
     "tools": [
       {
         "name": "specter.search_companies",

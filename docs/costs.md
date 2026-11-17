@@ -63,6 +63,9 @@ Each REST reference page states its exact cost in a note at the top; that note i
 
 ## What this plugin's own calls cost
 
+Specter bills the team's plan in credits, and publishes no price per credit. Each call below spends from that one
+pool; nothing here is a dollar figure.
+
 | Call | Endpoint | Cost |
 | --- | --- | --- |
 | `specter_search_companies` | `POST /companies/resolve` | Free |

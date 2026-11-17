@@ -92,7 +92,8 @@ until it has captured the live server's tool list, so each one is treated like a
 
 `specter.saved` is this plugin's one source under the source contract: the companies Specter **added to one saved
 company search**, as events, so Memory's collector or a script can follow a search without asking for the whole list
-again. It reads with the team key and costs one credit per company Specter returns.
+again. It reads with the team key and spends one credit from the team's plan per company Specter returns (Specter
+publishes no price per credit).
 
 - **Scope.** The thing a person confirms is the saved search's id (`scope.search`), from `specter_list_saved_searches`.
   The search must be shared to the API. People, talent and other products are not in this source: those are data about

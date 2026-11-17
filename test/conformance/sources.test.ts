@@ -147,12 +147,16 @@ describe("the source contract's conformance kit", () => {
       maxBytes: 65_536,
       scope: { keys: ["search"], suggest: { tool: "list_saved_searches", operations: ["searches.list"] } },
       permission: { events: "specter_events_list", operations: ["searches.companies.results"] },
+      // Specter bills in credits from the team's plan and publishes no price per credit. source-contract v0.2.0
+      // requires a `units` array for a metered source, and a unit requires `usd`, so the declaration carries a zero
+      // with a sentence saying it is not a price; a metered cost with no unit is refused by the package's schema.
       cost: { class: "metered", units: [{ per: "credit", usd: 0, conditions: expect.any(String) }], probe: { per: "call", usd: 0 } },
     })
     // A consumer on v0.1.x refuses `permission.identity: []` ("expected array to have >=1 items"), so it is omitted:
     // v0.2.0 reads an absent `identity` as undeclared, and the probe asserts its action alone.
     expect(source.permission).not.toHaveProperty("identity")
   })
+
 
   test("the owner probe names is the key's organisation, never a person", async () => {
     const open: SessionContext = { account: ACCOUNT, permission: { assert: async () => undefined } as never }
