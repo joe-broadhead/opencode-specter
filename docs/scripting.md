@@ -9,7 +9,7 @@ server. It uses the tools RPC, `specter.deals.tools`, through `opencode api` or 
 opencode api post /api/rpc/specter.deals.tools/<method> -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"<id>","input":{…}}}'
 ```
 
-The transport is the source contract's (`@we-the-rebel-alliance/source-contract`, tag v0.1.0), shared by the family.
+The transport is the source contract's (`@we-the-rebel-alliance/source-contract`, tag v0.2.0), shared by the family.
 
 | Method | Class | The tool |
 | --- | --- | --- |
