@@ -63,8 +63,9 @@ Each REST reference page states its exact cost in a note at the top; that note i
 
 ## What this plugin's own calls cost
 
-Specter bills the team's plan in credits, and publishes no price per credit. Each call below spends from that one
-pool; nothing here is a dollar figure.
+Specter bills the team's plan in credits and does not publish prices, so the plugin states **about $0.10 a credit as an
+estimate**: it is rounded up from what comparable company-data APIs charge per record, so it overstates rather than
+understates, and your team's own contract rate replaces it. Each call below spends from that one pool.
 
 | Call | Endpoint | Cost |
 | --- | --- | --- |
@@ -75,10 +76,10 @@ pool; nothing here is a dollar figure.
 | `specter.saved`'s read | the same results endpoint, with `new_results_after` | 1 credit per result returned |
 | `specter_probe` | `GET /organization/credits` | Free |
 
-A page reports what it spent as `cost: { units: [{ per: "credit", count }] }`: the number of results Specter returned,
-the refused ones included, because it charged for them. There is no dollar figure, because Specter publishes none. The
-source's `sources` declaration states the same unit, and its `conditions` say that the zero it carries is not a price
-(source-contract v0.2.0 requires a `usd` figure for a metered source; this plugin does not invent one).
+A page reports what it spent as `cost: { units: [{ per: "company", count }] }`: the number of results Specter returned,
+the refused and the repeated ones included, because it charged for them. The source's declaration prices that unit at
+the estimate above (`sources.items[0].cost.units[0].usd`), which is what a consumer shows at consent; it is not a
+Specter price.
 
 The source's own reads cost a little more than the companies they list, and that is by design: after the first page it
 re-reads the previous page's last five companies, and the next window starts two minutes before the previous window's

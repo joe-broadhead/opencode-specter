@@ -92,8 +92,7 @@ until it has captured the live server's tool list, so each one is treated like a
 
 `specter.saved` is this plugin's one source under the source contract: the companies Specter **added to one saved
 company search**, as events, so Memory's collector or a script can follow a search without asking for the whole list
-again. It reads with the team key and spends one credit from the team's plan per company Specter returns (Specter
-publishes no price per credit).
+again. It reads with the team key and spends one credit from the team's plan per company Specter returns.
 
 - **Scope.** The thing a person confirms is the saved search's id (`scope.search`), from `specter_list_saved_searches`.
   The search must be shared to the API. People, talent and other products are not in this source: those are data about
@@ -234,9 +233,11 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 - **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
   it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
   per-member keys; the plugin has not been tried with one.
-- **Credit costs come from Specter's docs.** [What Specter calls cost](docs/costs.md) lists Specter's published rates
-  for each MCP tool and REST call, with their sources. They are not yet confirmed against live calls. A result
-  reports what it spent only if Specter's response says so; the plugin never estimates.
+- **Credit costs come from Specter's docs, and the dollar price is an estimate.** [What Specter calls cost](docs/costs.md)
+  lists Specter's published rates for each MCP tool and REST call, with their sources; they are not yet confirmed
+  against live calls. Specter publishes no price per credit, so the source's declaration states **about $0.10 a credit**
+  as an estimate, rounded up from comparable company-data APIs so it overstates rather than understates; your team's
+  contract rate replaces it. A result reports what it spent in credits, and the plugin never guesses more than this.
 - **Error meanings come from Specter's docs.** The codes for a refused key, spent credits, the daily credit limit and
   the rest follow Specter's [Errors](https://api.tryspecter.com/api-ref/errors.md) page, not yet confirmed against live
   responses.

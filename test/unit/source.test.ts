@@ -61,7 +61,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     // Metadata only: no prose, no link, and the company id and name.
     expect(page.events[0]).toMatchObject({ kind: "x-specter/company", title: "Hedgehog Analytics", text: "", url: null, thread: null, actors: [], labels: [] })
     // One credit per result Specter returned, the refused company included: it was returned, so it was charged.
-    expect(page.cost).toEqual({ units: [{ per: "credit", count: 7 }] })
+    expect(page.cost).toEqual({ units: [{ per: "company", count: 7 }] })
     expect((read.calls[0]!.query ?? {})["new_results_after"]).toBe(SINCE)
     expect(read.calls[0]!.class).toBe("spend")
   })
@@ -98,7 +98,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(ids(second)).toEqual([])
     expect(second.more).toBe(false)
     // It was dropped, but Specter still returned it: one credit, honestly reported.
-    expect(second.cost).toEqual({ units: [{ per: "credit", count: 1 }] })
+    expect(second.cost).toEqual({ units: [{ per: "company", count: 1 }] })
   })
 
   it("drains a burst of companies added at one instant, a page at a time, without jamming or skipping one", async () => {

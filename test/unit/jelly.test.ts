@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { CODES, KEY_INTEGRATION_ID, KEY_METHOD_LABEL, SERVER_NAME } from "../../src/constants.js"
-import { CREDIT_PRICE_PUBLIC, MCP_DAILY_CALLS } from "../../src/costs.js"
+import { CREDIT_ESTIMATE_USD, CREDIT_PRICE_PUBLIC, MCP_DAILY_CALLS } from "../../src/costs.js"
 import { loadOptions, REQUEST_TIMEOUT } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
 import { SKILL_IDS } from "../../src/skills.js"
@@ -69,10 +69,10 @@ describe("the jelly declaration", () => {
   it("states the cost honestly: credits from one pool, no public price, the MCP allowance, a free key check", () => {
     expect(lineProblems("cost", jelly.cost, 300)).toEqual([])
     expect(jelly.cost).toMatch(/credits from the team's plan/)
-    expect(jelly.cost).toMatch(/publishes no price per credit/)
-    expect(jelly.cost).toMatch(/1 credit per result/)
-    expect(jelly.cost).toMatch(/saved-search source 1 per company/)
-    expect(jelly.cost).toContain(`${MCP_DAILY_CALLS} MCP calls a day`)
+    expect(jelly.cost).toMatch(/does not publish prices/)
+    expect(jelly.cost).toContain(`about $${CREDIT_ESTIMATE_USD.toFixed(2)} a credit as an estimate`)
+    expect(jelly.cost).toMatch(/team's contract rate replaces it/)
+    expect(jelly.cost).toMatch(/one credit per company/)
     expect(jelly.cost).toMatch(/the key check is free/)
     expect(CREDIT_PRICE_PUBLIC).toBe(false)
   })

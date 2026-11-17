@@ -388,8 +388,11 @@ export function toEvent(company: CompanyRecord, observedAt: string): SourceEvent
   })
 }
 
-/** What one results page cost: one credit per company Specter returned, which is what its reference states. */
-export const costOf = (results: number): EventsCost | undefined => (results > 0 ? { units: [{ per: "credit", count: results }] } : undefined)
+/**
+ * What one results page cost: one credit per company Specter returned, which is what its reference states. `per` names
+ * the descriptor's one price unit, `company`, whose dollar figure is the plugin's estimate (see `src/costs.ts`).
+ */
+export const costOf = (results: number): EventsCost | undefined => (results > 0 ? { units: [{ per: "company", count: results }] } : undefined)
 
 /**
  * The vendor page size for a caller's `limit`: never more than the caller asked for, never more than MAX_PAGE, and a

@@ -14,6 +14,7 @@ import { type ConformanceReport, type PageCase, type SessionContext, declaration
 import { encodeBoundCursor } from "@we-the-rebel-alliance/source-contract/cursor"
 import { readInstalledDescriptor } from "@we-the-rebel-alliance/source-contract/descriptor"
 import { type Sources, SOURCES_SCHEMA } from "@we-the-rebel-alliance/source-contract/schema"
+import { CREDIT_ESTIMATE_USD } from "../../src/costs.js"
 import { ownSpecs } from "../../src/read-tools.js"
 import { assertAction, fingerprintOf, type SourceCall, type SourceDeps, runEvents, runProbe } from "../../src/source/index.js"
 import { ACCOUNT, RETENTION_DAYS, ownerOf } from "../../src/source/saved.js"
@@ -147,10 +148,10 @@ describe("the source contract's conformance kit", () => {
       maxBytes: 65_536,
       scope: { keys: ["search"], suggest: { tool: "list_saved_searches", operations: ["searches.list"] } },
       permission: { events: "specter_events_list", operations: ["searches.companies.results"] },
-      // Specter bills in credits from the team's plan and publishes no price per credit. source-contract v0.2.0
-      // requires a `units` array for a metered source, and a unit requires `usd`, so the declaration carries a zero
-      // with a sentence saying it is not a price; a metered cost with no unit is refused by the package's schema.
-      cost: { class: "metered", units: [{ per: "credit", usd: 0, conditions: expect.any(String) }], probe: { per: "call", usd: 0 } },
+      // Specter bills in credits from the team's plan and publishes no price per credit; v0.2.0 requires a metered
+      // source to state a `usd` figure, so the declaration carries the plugin's estimate — rounded up from comparable
+      // company-data APIs, and replaced by a team's contract rate. Never zero, and no `conditions` (v0.1.x refuses it).
+      cost: { class: "metered", units: [{ per: "company", usd: CREDIT_ESTIMATE_USD }] },
     })
     // A consumer on v0.1.x refuses `permission.identity: []` ("expected array to have >=1 items"), so it is omitted:
     // v0.2.0 reads an absent `identity` as undeclared, and the probe asserts its action alone.
