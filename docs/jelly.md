@@ -42,15 +42,27 @@ Declared: `specter` and `specter-write`.
 
 None: `jelly.views` and `jelly.rpc` are empty.
 
+## Cost
+
+`jelly.cost`, shown on the review before the plugin installs: Specter bills in credits from the team's one pool and
+publishes no price per credit; each person gets 100 MCP tool calls a day, and past that a call spends team credits only
+if a Specter admin allows it; calls with the team key spend credits per result, and checking the key is free. The facts
+and their sources are in [What Specter calls cost](costs.md). `jelly.admin` is not declared: Specter's sign-in needs no
+admin step first, as far as its public docs show.
+
 ## Signing in
 
-`jelly.signIns` declares two sign-ins in one group, `specter`:
+`jelly.signIns` declares two separate sign-ins, not one group, because Jelly reads a group's sign-ins as alternatives,
+one connected being enough, and these two are not: Specter's MCP tokens and its API keys are not interchangeable.
 
-- `account`, for Specter's hosted MCP server `specter`, which OpenCode signs in with OAuth, per person.
-- `specter`, the plugin's own key integration: the team's Specter API key, pasted once.
+- `account`, for Specter's hosted MCP server `specter`, which OpenCode signs in with OAuth, per person. Required.
+- `specter`, the plugin's own key integration: the team's Specter API key, pasted once. Not required (`required:
+  false`) until one of the plugin's own tools needs it. Its `help` links to Specter's
+  [API Console](https://app.tryspecter.com/settings/api-console), and its `needed` codes, `AUTH_REQUIRED` (no key
+  connected) and `KEY_REJECTED` (Specter refused the key), ask the person to connect it.
 
-TODO(Slice 5): whether Jelly's sign-in screen draws a `key` method for a plugin's own integration is not verified; it is checked
-by hand before the first release.
+Not yet checked: whether Jelly's sign-in screen draws a `key` method for a plugin's own integration. It is checked by
+hand before the first release.
 
 ## Settings
 
