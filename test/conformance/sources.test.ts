@@ -43,7 +43,7 @@ const TOOLS = Object.entries(OWN_TOOL_CLASSES).map(([id, toolClass]) => ({ id, r
  * inline cap, or a company record the plugin does not recognise, is UNAVAILABLE with the cursor held, so `failed[]`
  * (a retryable per-item drop) can never be produced.
  */
-const ATOMIC = "Specter answers one page of a saved search's results in one GET, and an item the plugin cannot read fails the whole page (UNAVAILABLE, cursor held), so no single company is ever dropped on its own"
+const ATOMIC = "every vendor read a page makes either succeeds whole or fails the page (UNAVAILABLE, cursor held), so no single company is ever dropped on its own"
 /** `probe`'s and `events_list`'s own failures, as the plugin raises them. */
 const deps = (context: SessionContext): SourceDeps => ({
   access: async () => ({ key: KEY, read: provider() }),

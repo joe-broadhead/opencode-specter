@@ -29,9 +29,9 @@ such as a 403 without Specter's error code), or not checked.
   Rotating it is the team's Specter admin's job, not this plugin's: the key is requested and replaced in the team's
   [API Console](https://app.tryspecter.com/settings/api-console), and Specter's
   [Authentication](https://api.tryspecter.com/api-ref/auth.md) page asks for a rotation by email to
-  api-support@tryspecter.com. After the rotation, paste the new key in `/connect` → **Specter** on every machine: the
-  plugin's own tools then fail with `KEY_REJECTED`, the source with `NEEDS_SIGN_IN`, and status shows the old key as
-  rejected once it re-checks it, which it does when its last answer is more than 10 minutes old.
+  api-support@tryspecter.com. After the rotation, paste the new key in `/connect` → **Specter** on every machine; a
+  machine still holding the old key gets `KEY_REJECTED` from the plugin's own tools and `NEEDS_SIGN_IN` from the source,
+  and status shows it as rejected once it re-checks it, which it does when its last answer is more than 10 minutes old.
 
 ### Untrusted content
 

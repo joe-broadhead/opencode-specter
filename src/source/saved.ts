@@ -34,18 +34,28 @@
  * - `f` is the window's **first observation**, the `Date` of its first page, kept until the window ends.
  * - `p` is the **page** within the window. The watermark is fixed for the whole window and only the page advances, so
  *   a burst of companies added at one instant drains page by page and never jams.
- * - `k` holds a **16-hex hash of each company id** the last read listed (never the ids themselves, so the cursor stays
- *   small whatever their length), and a company whose hash is already there is dropped instead of repeated.
+ * - `k` holds a **40-bit hash of each company id** the window has seen (never the ids themselves, so the cursor stays
+ *   small whatever their length), and a company whose hash is already there is dropped instead of repeated: the first
+ *   `q` entries are the previous window's, pinned until the lookback has passed them, and the rest are this window's.
+ *   Forty bits rather than the thirty-two an eight-character prefix would give: about fifty ids over 32 bits collide
+ *   once in 30 million windows, some thirty times a year at 5-minute polls, and a collision drops a company; forty bits
+ *   make it about once in 13,000 years.
  *
  * **The window's next watermark is `f − LOOKBACK`**, not the last page's time. Offset paging over a set that can
  * change has no stable order: a company added while the reader pages can land at an offset already read, a company
  * that stops matching shifts the rest back one, and an addition can become visible after an answer that already
  * carried a later `Date`. The lookback re-reads the last couple of minutes of additions, so those arrive in the next
- * window; what it cannot catch within one window is caught by the **page overlap**: after the first page, the last
- * `OVERLAP` companies of the previous page are read again (offset `p × MAX_PAGE − OVERLAP`, expressible as
- * `page = 5p − 1, limit = OVERLAP`) and dropped by hash. Both cost credits — the overlap re-reads `OVERLAP` companies
- * and the lookback re-reads what it covers — and `docs/costs.md` says so. `LOOKBACK` is an assumption (two minutes)
- * until live check 2 measures the lag between an addition and its visibility.
+ * window; what it cannot catch within one window is caught by the **page overlap**: after the first page, the previous
+ * page's tail is read again (its last `OVERLAP` companies, or the whole page when the caller's limit is smaller) and
+ * dropped by hash. The overlap is read *first*, so a failure there risks its few credits rather than the page's. Both
+ * cost credits — re-reads are charged like any other result — and `docs/costs.md` says so. `LOOKBACK` is an assumption
+ * (two minutes) until live check 2 measures the lag between an addition and its visibility.
+ *
+ * **A window bigger than the carry skips its lookback rather than repeating it.** The cursor can pin 20 companies
+ * (`CARRY_PINNED`). When a window listed more, the lookback could not de-duplicate them, so the plugin starts the next
+ * window at that window's first answer instead — never re-listing and re-charging the burst — records the line it did
+ * not read (`u`) so no later window reads back into it until the lookback line has passed, and answers one
+ * `gap { reason: "window-truncated" }` for the skipped stretch, once.
  *
  * A company the plugin does not recognise, and a body cut at the inline cap, **fail the whole page** (`UNAVAILABLE`,
  * the cursor held): a page that silently dropped an item or ended early would lose history and under-report credits.
@@ -93,9 +103,21 @@ export const MAX_PAGE = 25
 export const OVERLAP = 5
 /** The lookback the next window starts before this window's first observation: an assumption until live check 2. */
 export const LOOKBACK_MS = 2 * 60_000
-/** How many hex characters of a company id's SHA-256 the cursor carries, and the most it carries. */
-export const HASH_CHARS = 16
-export const MAX_CARRIED = MAX_PAGE + OVERLAP
+/**
+ * How many hex characters of a company id's SHA-256 the cursor carries: 40 bits. Eight would carry more ids in the same
+ * space, but fifty ids over 32 bits collide about once in 30 million windows — some thirty times a year at 5-minute
+ * polls — and a collision drops a company; forty bits make it about once in 13,000 years. A test pins the length.
+ */
+export const HASH_CHARS = 10
+/**
+ * A window that lists this many companies or fewer keeps the lookback: its ids fit the cursor, so the re-read lists
+ * nothing twice. A window that lists more cannot be carried, so the lookback is skipped and one `window-truncated` gap
+ * says so, rather than re-listing and re-charging the whole burst.
+ */
+export const CARRY_PINNED = 20
+/** The hashes a window carries of its own listings while it pages, so the overlap and a repeat are dropped. */
+export const CARRY_RECENT = 20
+export const MAX_CARRIED = CARRY_PINNED + CARRY_RECENT
 /** Specter tracks additions to a saved search for 60 days; an older cutoff answers 422 rather than a partial answer. */
 export const RETENTION_DAYS = 60
 const RETENTION_MS = RETENTION_DAYS * 86_400_000
@@ -314,8 +336,16 @@ interface Position {
   readonly f?: string
   /** The page within the window. */
   readonly p: number
-  /** A 16-hex hash per company id already listed, so none is repeated. */
+  /** A 10-hex hash per company id already listed, so none is repeated. */
   readonly k: readonly string[]
+  /** How many of `k` are the previous window's, pinned until the lookback has passed them; the rest are this window's. */
+  readonly q: number
+  /** How many companies this window has listed, capped at CARRY_PINNED + 1. */
+  readonly n: number
+  /** No lookback may read before this line: a window whose burst the cursor could not carry was skipped. */
+  readonly u?: string
+  /** The skipped lookback's start, answered once as a `window-truncated` gap. */
+  readonly t?: string
 }
 
 const bindingOf = (search: string): CursorBinding => ({ plugin: "specter", source: SOURCE, account: ACCOUNT, scope: { [SCOPE_KEY]: search } })
@@ -329,11 +359,22 @@ export function hashOf(id: string): string {
 }
 
 /**
- * The longest this source's cursor can be: a full page's hashes, a six-figure page and the longest ids. The state
- * fields are fixed-width, so this is the true worst case; `encodeBoundCursor` refuses anything over 1,024.
+ * The longest this source's cursor can be: every hash the carry holds, a six-figure page, both window lines and the
+ * longest search id. The state fields are fixed-width, so this is the true worst case; `encodeBoundCursor` refuses
+ * anything over 1,024, and a test pins it.
  */
 export function maxCursorLength(search: string): number {
-  const state = { w: "2026-11-30T23:59:59.999Z", f: "2026-11-30T23:59:59.999Z", p: 999_999, k: Array.from({ length: MAX_CARRIED }, () => "0123456789abcdef") }
+  const at = "2026-11-30T23:59:59.999Z"
+  const state = {
+    w: at,
+    f: at,
+    p: 999_999,
+    q: CARRY_PINNED,
+    n: CARRY_PINNED + 1,
+    k: Array.from({ length: MAX_CARRIED }, () => "0123456789abcdef".slice(0, HASH_CHARS)),
+    u: at,
+    t: at,
+  }
   return encodeBoundCursor(bindingOf(search), state).length
 }
 
@@ -349,17 +390,29 @@ function positionOf(cursor: string, search: string): Position {
     refuse("CURSOR_INVALID", "The cursor is not this source's, this account's and this saved search's", "Start the read again with since, or with the previous result's cursor.")
   }
   const { state } = decoded
-  const [w, f, p, k] = [state["w"], state["f"], state["p"], state["k"]]
+  const [w, p, k] = [state["w"], state["p"], state["k"]]
+  // A cursor from before the carry was split says neither: it is read as an empty previous window.
+  const [q, n] = [state["q"] ?? 0, state["n"] ?? 0]
+  const [f, u, t] = [state["f"], state["u"], state["t"]]
   if (!isoTime(w) || typeof p !== "number" || !Number.isSafeInteger(p) || p < 0 || p > 1_000_000) {
     refuse("CURSOR_INVALID", "The cursor does not hold this source's watermark and page", "Start the read again with since, or with the previous result's cursor.")
   }
-  if (f !== undefined && !isoTime(f)) {
-    refuse("CURSOR_INVALID", "The cursor's window start is not a time", "Start the read again with since, or with the previous result's cursor.")
+  for (const [value, what] of [
+    [f, "window start"],
+    [u, "lookback floor"],
+    [t, "skipped lookback"],
+  ] as const) {
+    if (value !== undefined && !isoTime(value)) {
+      refuse("CURSOR_INVALID", `The cursor's ${what} is not a time`, "Start the read again with since, or with the previous result's cursor.")
+    }
   }
   if (!Array.isArray(k) || k.length > MAX_CARRIED || !k.every((hash): hash is string => typeof hash === "string" && HASH.test(hash))) {
     refuse("CURSOR_INVALID", "The cursor does not hold this source's listed-company hashes", "Start the read again with since, or with the previous result's cursor.")
   }
-  return { w, p, k, ...(f === undefined ? {} : { f }) }
+  if (typeof q !== "number" || !Number.isSafeInteger(q) || q < 0 || q > k.length || typeof n !== "number" || !Number.isSafeInteger(n) || n < 0 || n > CARRY_PINNED + 1) {
+    refuse("CURSOR_INVALID", "The cursor does not say how much of its carry is the previous window's", "Start the read again with since, or with the previous result's cursor.")
+  }
+  return { w, p, k, q, n, ...(isoTime(f) ? { f } : {}), ...(isoTime(u) ? { u } : {}), ...(isoTime(t) ? { t } : {}) }
 }
 
 /** The scope's saved-search id, canonical (`scope.search` is a string or a one-item list). */
@@ -395,18 +448,21 @@ export function toEvent(company: CompanyRecord, observedAt: string): SourceEvent
 export const costOf = (results: number): EventsCost | undefined => (results > 0 ? { units: [{ per: "company", count: results }] } : undefined)
 
 /**
- * The vendor page size for a caller's `limit`: never more than the caller asked for, never more than MAX_PAGE, and a
- * multiple of OVERLAP once it is at least OVERLAP, so the overlap's offset is always expressible as `page`/`limit`. A
- * page read is therefore never cut by the caller's limit, and costs only what it returns.
+ * The vendor page size for a caller's `limit`: never more than the caller asked for and never more than MAX_PAGE, so a
+ * page read is never cut by the caller's limit, and costs only what it returns.
  */
 export function pageSizeFor(limit: number): number {
-  const bounded = Math.max(1, Math.min(limit, MAX_PAGE))
-  return bounded <= OVERLAP ? bounded : Math.floor(bounded / OVERLAP) * OVERLAP
+  return Math.max(1, Math.min(limit, MAX_PAGE))
 }
 
-/** The overlap read's page number for a main page of `pageSize`: the offset is `p × pageSize − OVERLAP`. */
-export function overlapPageFor(page: number, pageSize: number): number {
-  return (page * pageSize - OVERLAP) / OVERLAP
+/**
+ * The overlap read for page `p`: the previous page's tail, so a company that shifted back is still listed. A page size
+ * that is a multiple of OVERLAP reads just that tail; any other (a caller's limit below 5) re-reads the previous small
+ * page whole, which costs what it returns and is still cheaper than losing a company to a shift.
+ */
+export function overlapReadFor(page: number, pageSize: number): { readonly page: number; readonly limit: number } {
+  if (pageSize % OVERLAP === 0) return { page: (page * pageSize - OVERLAP) / OVERLAP, limit: OVERLAP }
+  return { page: page - 1, limit: pageSize }
 }
 
 /** The code, what happened and the next step of the plugin's own request failure, when `error` is one. */
@@ -481,24 +537,27 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
   const { read, owner } = held
   const nowIso = new Date(options.now).toISOString()
   const position: Position = request.cursor === undefined
-    ? { w: new Date(Math.min(startTime(request, options.now), options.now)).toISOString(), p: 0, k: [] }
+    ? { w: new Date(Math.min(startTime(request, options.now), options.now)).toISOString(), p: 0, k: [], q: 0, n: 0 }
     : positionOf(request.cursor, search)
 
   // The 60-day window is checked before the call: a 422 would cost nothing but a round trip, and the answer must be
   // this source's own gap, never Specter's error. The restart is the earliest line Specter can still serve.
   const edge = options.now - RETENTION_MS + RESTART_GRACE_MS
   if (Date.parse(position.w) < options.now - RETENTION_MS) {
-    return gapPage(search, position, owner, Math.max(Date.parse(position.w), edge), nowIso)
+    return gapPage(search, position, owner, Math.max(Date.parse(position.w), edge, position.u === undefined ? 0 : Date.parse(position.u)), nowIso)
   }
 
-  // The page: the main read, and after the first page the previous page's tail again, so a shift cannot skip one.
-  // The vendor page is a multiple of OVERLAP, so the tail starts at an offset `page`/`limit` can express exactly.
+  // The page: the previous page's tail first (so a failed read risks its few credits, not the page's), then the page
+  // itself. Both either succeed whole or fail the page, and nothing is listed from a page that was not read whole.
   const pageSize = pageSizeFor(request.limit)
   let main: VendorPage
   let overlap: VendorPage | undefined
   try {
+    if (position.p > 0) {
+      const where = overlapReadFor(position.p, pageSize)
+      overlap = await vendorPage(read, search, position.w, where.page, where.limit, options.now)
+    }
     main = await vendorPage(read, search, position.w, position.p, pageSize, options.now)
-    if (position.p > 0 && pageSize >= OVERLAP) overlap = await vendorPage(read, search, position.w, overlapPageFor(position.p, pageSize), OVERLAP, options.now)
   } catch (error) {
     // Specter's own retention 422 is the one gap it decides. Its clock, not the plugin's, said the watermark was too
     // old, so restart at the window's edge; only when the cursor is already at or past that edge (a clock more than
@@ -524,29 +583,56 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
   const full = main.returned >= pageSize
   const cut = fits < screened.events.length
   const done = !full && !cut
-  // The window's next watermark looks back from its *first* observation, so a company added while the reader paged, or
-  // one that became visible late, is listed next time; the window advances by at least a millisecond regardless.
   const first = position.f ?? observedAt
-  const next = new Date(Math.max(Date.parse(first) - LOOKBACK_MS, Date.parse(position.w) + 1)).toISOString()
-  // Every company this read saw is carried, the refused and already-listed ones included, so a company the lookback
-  // re-reads is dropped rather than listed twice; a page cut for size is read again at the same offset and carries
-  // only what it has reached so far, so the rest of it is still there next time.
-  const carried = [
-    ...new Set(
-      cut
-        ? [...position.k, ...page.map((event) => hashOf(event.external_id.slice(EXTERNAL_PREFIX.length)))]
-        : [...position.k, ...(overlap?.companies ?? []).map((company) => hashOf(company.id)), ...main.companies.map((company) => hashOf(company.id))],
-    ),
-  ].slice(-MAX_CARRIED)
+  const count = Math.min(CARRY_PINNED + 1, position.n + (cut ? page.length : listed.length))
+  const pinned = position.k.slice(0, position.q)
+  const recent = position.k.slice(position.q)
   const cost = costOf(main.returned + (overlap?.returned ?? 0))
+  // The skipped lookback is answered on the first page of its window, once: the page's cursor no longer carries it.
+  const skipped = position.t !== undefined && position.p === 0 ? position.t : undefined
+  let state: Record<string, unknown>
+  if (done) {
+    // The lookback is kept only when this window's ids fit the carry: then the next window may re-read the last two
+    // minutes and list nothing twice. A bigger window cannot be carried, so the lookback is skipped — never re-listing
+    // and re-charging the burst — and the skipped stretch is named once as `window-truncated`. The floor `u` keeps a
+    // later window from reading back into it until the lookback line has passed it.
+    const lookback = count <= CARRY_PINNED
+    const floor = position.u === undefined ? 0 : Date.parse(position.u)
+    const next = new Date(Math.max(Date.parse(first) - (lookback ? LOOKBACK_MS : 0), Date.parse(position.w) + 1, floor)).toISOString()
+    // The pinned set carries every hash this window knows — the ones it listed and the ones the lookback re-read and
+    // dropped — so a company still inside the lookback is not listed on the window after it either.
+    const windowHashes = lookback ? [...seen].slice(-CARRY_PINNED) : []
+    const skippedFrom = !lookback && Date.parse(first) - LOOKBACK_MS > Date.parse(position.w) ? new Date(Date.parse(first) - LOOKBACK_MS).toISOString() : undefined
+    state = {
+      w: next,
+      p: 0,
+      q: windowHashes.length,
+      n: 0,
+      k: windowHashes,
+      // The floor stays while it can still bind: a later window's lookback must not read back into a skipped stretch.
+      ...(floor === 0 && lookback ? {} : { u: new Date(Math.max(floor, lookback ? 0 : Date.parse(first))).toISOString() }),
+      ...(skippedFrom === undefined ? {} : { t: skippedFrom }),
+    }
+  } else {
+    // Mid-window: the previous window's hashes stay pinned, so the lookback's repeats are dropped for the whole window,
+    // and this window's own hashes grow up to CARRY_RECENT. A page cut for size is read again at the same offset and
+    // carries only what it has listed, so the rest is still there next time.
+    const fresh = cut ? page.map((event) => hashOf(event.external_id.slice(EXTERNAL_PREFIX.length))) : listed.map((company) => hashOf(company.id))
+    const grown = [...new Set([...recent, ...fresh])].slice(-CARRY_RECENT)
+    state = {
+      w: position.w,
+      f: first,
+      p: cut ? position.p : position.p + 1,
+      q: pinned.length,
+      n: count,
+      k: [...pinned, ...grown],
+      ...(position.u === undefined ? {} : { u: position.u }),
+      ...(position.t === undefined || skipped !== undefined ? {} : { t: position.t }),
+    }
+  }
   let cursor: string
   try {
-    cursor = encodeBoundCursor(bindingOf(search), {
-      w: done ? next : position.w,
-      ...(done ? {} : { f: first }),
-      p: done ? 0 : cut ? position.p : position.p + 1,
-      k: carried,
-    })
+    cursor = encodeBoundCursor(bindingOf(search), state)
   } catch (error) {
     // The budget was checked before the read, so this is a bug, not a full page: refuse rather than throw a plain Error
     // whose page the consumer could not resume from.
@@ -559,6 +645,7 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
     !done,
     {
       scope: { [SCOPE_KEY]: search },
+      ...(skipped === undefined ? {} : { gap: { reason: "window-truncated" as const, since: skipped } }),
       ...(screened.refused.length > 0 ? { refused: screened.refused } : {}),
       ...(cost === undefined ? {} : { cost }),
       plugin: PACKAGE,
@@ -573,7 +660,7 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
  * It is answered once: the cursor it answers carries a fresh watermark, and no later page repeats the gap.
  */
 function gapPage(search: string, position: Position, owner: EventsOwner, restartAt: number, nowIso: string): EventsListResult {
-  const restart = encodeBoundCursor(bindingOf(search), { w: new Date(restartAt).toISOString(), p: 0, k: [] })
+  const restart = encodeBoundCursor(bindingOf(search), { w: new Date(restartAt).toISOString(), p: 0, k: [], q: 0, n: 0 })
   return eventsListResult({ source: SOURCE, account: ACCOUNT, owner }, [], restart, true, {
     scope: { [SCOPE_KEY]: search },
     gap: { reason: "expired", since: position.w },

@@ -213,6 +213,79 @@ describe("review probe P13: the real request layer, realistic record sizes", () 
   })
 })
 
+describe("review probes round 2", () => {
+  const credits = (calls: readonly { query?: Readonly<Record<string, unknown>> }[]) => calls.length
+
+  it("R9 a burst larger than the carry is not listed, or charged, a second time", async () => {
+    const read = provider()
+    read.companies.splice(0, read.companies.length)
+    const t = iso(NOW - 30_000)
+    for (let n = 0; n < 60; n++) read.companies.push({ id: `burst${String(n).padStart(3, "0")}`, added: t, organization_name: `B ${n}` })
+    let clock = NOW
+    const first = await drain(read, { since: iso(NOW - 3_600_000), limit: 25 }, () => clock)
+    expect(first.seen).toHaveLength(60)
+    const readsAfterFirst = read.calls.length
+    // The lookback line is the first window's observation minus two minutes, and 60 ids do not fit the carry, so it is
+    // skipped once and said so.
+    read.advance(30_000)
+    clock += 30_000
+    const second = await drain(read, { cursor: first.cursor, limit: 25 }, () => clock)
+    expect(second.seen).toEqual([])
+    expect(second.gaps).toEqual([{ reason: "window-truncated", since: iso(NOW - 120_000) }])
+    // Ninety seconds on, the lookback line is still inside the skipped stretch: the floor holds it, so still nothing.
+    read.advance(90_000)
+    clock += 90_000
+    const third = await drain(read, { cursor: second.cursor, limit: 25 }, () => clock)
+    expect(third.seen).toEqual([])
+    expect(third.gaps).toEqual([])
+    // Five minutes on, the lookback line has passed the skipped stretch: no gap, and still nothing re-listed.
+    read.advance(300_000)
+    clock += 300_000
+    const later = await drain(read, { cursor: third.cursor, limit: 25 }, () => clock)
+    expect(later.seen).toEqual([])
+    expect(later.gaps).toEqual([])
+    // No company twice, one gap, and the burst charged once: only the first poll's reads reached Specter's results.
+    const listed = [...first.seen, ...second.seen, ...third.seen, ...later.seen]
+    expect(new Set(listed).size).toBe(listed.length)
+    // One read per poll: none of them returned a company, so none of them was charged for a result.
+    expect(read.calls.length - readsAfterFirst).toBe(3)
+    // The polls after it ask from the first window's own observation, so the burst is behind every one of them.
+    for (const call of read.calls.slice(readsAfterFirst)) expect(Date.parse(String((call.query ?? {})["new_results_after"]))).toBeGreaterThanOrEqual(NOW)
+  })
+
+  it("R8 a shift mid-window is recovered by the overlap, at limit 25 and at limit 4", async () => {
+    for (const limit of [25, 4]) {
+      for (const removed of [1, 5, 6]) {
+        const read = provider()
+        read.companies.splice(0, read.companies.length)
+        const t = iso(NOW - HOUR)
+        for (let n = 0; n < 30; n++) read.companies.push({ id: `shift${String(n).padStart(3, "0")}`, added: t, organization_name: `S ${n}` })
+        const first = await list({ scope: SCOPE, since: iso(NOW - 2 * HOUR), limit }, read, NOW)
+        // Companies on the first page stop matching (a filter edit, a re-score): the rest shift back.
+        const gone = new Set(Array.from({ length: removed }, (_, n) => `shift${String(n).padStart(3, "0")}`))
+        for (const id of gone) read.companies.splice(read.companies.findIndex((company) => company.id === id), 1)
+        const rest = await drain(read, { cursor: first.cursor, limit }, () => NOW + 1000)
+        const all = [...ids(first), ...rest.seen]
+        const lost = read.companies.filter((company) => !all.includes(`company:${company.id}`))
+        // The overlap recovers a shift up to its own size; a larger one within a window is not recovered, and Known
+        // limits says so. At limit 4 the previous page is re-read whole, so the same holds.
+        expect(lost.length, `limit ${limit}, ${removed} removed: ${lost.map((company) => company.id).join(",")}`).toBeLessThanOrEqual(removed > 5 ? removed - 5 : 0)
+      }
+    }
+  })
+
+  it("R11 the overlap read comes first, so a failure there spends no page credits", async () => {
+    const read = provider()
+    const first = await list({ scope: SCOPE, since: iso(NOW - 6 * HOUR), limit: 5 }, read, NOW)
+    expect(first.more).toBe(true)
+    const before = read.calls.length
+    read.failNext(failure(429, "RATE_LIMITED", { rateReset: 1 }))
+    await expect(list({ scope: SCOPE, cursor: first.cursor, limit: 5 }, read, NOW + 1000)).rejects.toThrow(/^RATE_LIMITED: /)
+    // One read, the overlap's; the main page was never asked for.
+    expect(read.calls.length - before).toBe(1)
+  })
+})
+
 describe("review probe P14: the cursor with Specter-shaped ids, after a gap", () => {
   it("P14 a full page of 24-hex ids encodes, and the worst case stays inside the contract's 1,024", async () => {
     const read = provider()
@@ -234,8 +307,8 @@ describe("review probe P14: the cursor with Specter-shaped ids, after a gap", ()
     }
     expect(heights.every((length) => length <= 1024)).toBe(true)
     expect(maxCursorLength(SEARCH)).toBeLessThanOrEqual(1024)
-    // The worst case is fixed-width, and it is 922, not 1,055 — whatever the search's id.
-    expect(maxCursorLength(SEARCH)).toBe(922)
+    // The worst case is fixed-width: 956 characters, inside the contract's 1,024 — whatever the search's id.
+    expect(maxCursorLength(SEARCH)).toBe(956)
     for (const id of ["1", "5432", "12345678901234567890"]) expect(maxCursorLength(id)).toBeLessThanOrEqual(1024)
     // And the page is sized so a page's own records stay inside the source's inline budget.
     expect(MAX_PAGE * RECORD_BUDGET_BYTES).toBeLessThanOrEqual(SOURCE_INLINE_BYTES)

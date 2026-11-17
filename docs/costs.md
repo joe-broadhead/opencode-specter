@@ -64,8 +64,9 @@ Each REST reference page states its exact cost in a note at the top; that note i
 ## What this plugin's own calls cost
 
 Specter bills the team's plan in credits and does not publish prices, so the plugin states **about $0.10 a credit as an
-estimate**: it is rounded up from what comparable company-data APIs charge per record, so it overstates rather than
-understates, and your team's own contract rate replaces it. Each call below spends from that one pool.
+estimate**: it is rounded up from the range comparable company-data APIs publish per company record (a few cents to a
+few tens of cents), so it overstates rather than understates, and your team's own contract rate replaces it. Each call
+below spends from that one pool.
 
 | Call | Endpoint | Cost |
 | --- | --- | --- |
@@ -84,8 +85,10 @@ Specter price.
 The source's own reads cost a little more than the companies they list, and that is by design: after the first page it
 re-reads the previous page's last five companies, and the next window starts two minutes before the previous window's
 first answer. Every company Specter returns is charged, so a poll can cost a few credits more than the events it
-carries. A body cut at the read's 8 MB inline limit fails the page instead (`UNAVAILABLE`), so a cut answer is never
-listed as a short one.
+carries. A window that listed more than 20 companies cannot be de-duplicated by the cursor, so its lookback is skipped
+rather than re-charging the burst, and one `window-truncated` gap reports the two minutes that were not re-read. A body
+cut at the read's 8 MB inline limit, or a record the plugin does not recognise, fails the page instead
+(`UNAVAILABLE`) — and a page that fails after Specter answered is still charged.
 
 ## What a credit costs
 

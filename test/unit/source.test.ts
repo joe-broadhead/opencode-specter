@@ -4,6 +4,8 @@ import { type SourceEvent, parseSourceError } from "@we-the-rebel-alliance/sourc
 import type { EventsListResult } from "@we-the-rebel-alliance/source-contract/events"
 import {
   ACCOUNT,
+  CARRY_PINNED,
+  CARRY_RECENT,
   MAX_CARRIED,
   MAX_PAGE,
   RETENTION_DAYS,
@@ -82,7 +84,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(state["s"]).toBe("saved")
     // Hashes, never ids: 16 hex characters each, whatever the ids' length.
     expect(state["k"]).toEqual(expect.any(Array))
-    for (const hash of state["k"] as string[]) expect(hash).toMatch(/^[0-9a-f]{16}$/)
+    for (const hash of state["k"] as string[]) expect(hash).toMatch(/^[0-9a-f]{10}$/)
     // The window is done, so the watermark is the lookback line before its first observation, and the page is 0.
     expect(state["w"]).toBe(new Date(NOW - 120_000).toISOString())
     expect(state["p"]).toBe(0)
@@ -210,7 +212,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE, limit: 500 }, read)
     expect(page.events.length).toBeLessThanOrEqual(MAX_PAGE)
     expect(Number((read.calls[0]!.query ?? {})["limit"])).toBe(MAX_PAGE)
-    expect(MAX_CARRIED).toBe(MAX_PAGE + 5)
+    expect(MAX_CARRIED).toBe(CARRY_PINNED + CARRY_RECENT)
   })
 })
 

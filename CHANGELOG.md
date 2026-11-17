@@ -31,7 +31,9 @@ All notable changes to this project are documented here. The format follows [Kee
   added mid-window, shifted by a re-match, or visible late; both re-reads are charged, and repeats are dropped by id.
   A cursor older than Specter's 60-day window answers `gap` once, with `more: true`, and restarts at the window's edge
   rather than at "now". A cut answer or an unrecognised record fails the page (`UNAVAILABLE`) with the cursor held, so
-  no company is lost and the credits reported are what Specter returned.
+  no company is lost and the credits reported are what Specter returned. A window that listed more than the cursor can
+  carry (20 companies) is not re-read and re-charged by the lookback: its lookback is skipped and one
+  `window-truncated` gap reports the two minutes that were not re-read.
 - `specter_probe`, which names the team key's organisation from Specter's free credit-balance call.
 - `npm run conformance` runs the source contract's conformance kit over recorded Specter answers and writes
   `reports/conformance-report.json` with `ok: true`.

@@ -107,14 +107,18 @@ again. It reads with the team key and spends one credit from the team's plan per
   hash of each company id the last read saw. Its worst case is 922 characters, inside the contract's 1,024, and that
   budget is checked before a single credit is spent. Paging is by offset over a set that can change, so the watermark
   is fixed until the window ends: a burst of companies added at one instant drains page by page and never jams.
-- **Late arrivals, shifts and repeats.** Offset paging over a changing set has no stable order, so the plugin does not
-  pretend otherwise: after the first page it re-reads the previous page's last five companies (and drops them by hash),
-  and the next window starts two minutes *before* this window's first answer, not at its last one. That is what finds a
-  company added while the reader paged, one whose match changed, or one that became visible late. Both re-reads are
-  charged, and companies they repeat are listed once because the cursor drops them by id — a company older than the
-  cursor's 30 carried hashes can repeat, with the same `external_id`. Specter's inclusive cutoff ("on or after") is
-  covered the same way. The two minutes are an assumption until a live check measures the lag between an addition and
-  its visibility.
+- **Late arrivals and shifts.** Offset paging over a changing set has no stable order, so the plugin does not pretend
+  otherwise: after the first page it re-reads the previous page's last five companies, and the next window starts two
+  minutes *before* this window's first answer, not at its last one. That is what finds a company added while the reader
+  paged, one whose match changed, or one that became visible late. Both re-reads are charged, and a repeat is listed
+  once because the cursor drops it by a 40-bit hash of its id: a window that listed 20 companies or fewer carries all
+  of them through the lookback.
+- **A burst larger than the cursor can carry is skipped, not repeated.** A window that listed more than 20 companies
+  cannot be de-duplicated by the cursor, so instead of re-reading and re-charging the whole burst the plugin starts the
+  next window at that window's first answer and reports one `gap` with reason `window-truncated` for the two minutes it
+  did not re-read. That is the honest trade: a possible late arrival inside those two minutes is dropped and said so,
+  and no company is listed or charged twice. Specter's inclusive cutoff ("on or after") is covered by the same carry.
+  The two minutes are an assumption until a live check measures the lag between an addition and its visibility.
 - **60 days, then a gap.** Specter tracks additions for 60 days. A cursor older than that answers `gap` with reason
   `expired` once, with `more: true` so the consumer reads on at once, and its cursor restarts at the earliest line
   Specter can still serve — the window's edge, not "now" — so the sixty days Specter still holds are listed rather than
@@ -228,8 +232,13 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
   charges one credit per company: a consumer's own consent and budget decide whether it runs, and the `specter` skill
   says never to call it to answer a question. The direct `specter_saved_search_results` and `specter_get_company` calls
   are `spend`, and `access` gates those as changes.
-- **Repeats and their credits.** The lookback and the page overlap re-read companies Specter still returns, so a poll
-  can cost a few more credits than the companies it lists. `cost` always reports what Specter returned.
+- **Credits for re-reads and refusals.** The page overlap and the lookback re-read companies Specter still returns, so
+  a poll can cost a few more credits than the events it carries; `cost` always reports what Specter returned. A page
+  that fails after Specter answered — a cut body, an unrecognised record, a rate limit on its second read — is still
+  charged, so an error that repeats costs credits until it is fixed.
+- **Shifts inside one window.** The page overlap recovers a company shifted back by up to five places, or by the whole
+  page when the caller's `limit` is below five. A larger shift between two page reads of one window is not recovered;
+  the next window's lookback picks it up only if it was added within those two minutes.
 - **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
   it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
   per-member keys; the plugin has not been tried with one.
