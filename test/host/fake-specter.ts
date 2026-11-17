@@ -1,5 +1,5 @@
 // A loopback fake of Specter's two hosts: the MCP server at /mcp (Streamable HTTP, JSON responses) and the REST API
-// under /api/v1. It records each request's method, path, JSON-RPC method and whether an API key or a bearer token was
+// under /api/v1, which serves the free credit balance the key check asks. It records each request's method, path, JSON-RPC method and whether an API key or a bearer token was
 // present, never their values.
 //
 // The MCP server asks for a sign-in by default, with a bearer challenge, as a server does before one. It serves no
@@ -27,14 +27,22 @@ export interface FakeSpecter {
   readonly requests: FakeRequest[]
   /** While true, every MCP request gets 401 with a bearer challenge. */
   challenge: boolean
+  /** The team keys the REST API accepts. */
+  readonly keys: Set<string>
   close(): Promise<void>
 }
+
+/**
+ * The credit balance (`GET /api/v1/organization/credits`), free, in the shape of Specter's OpenAPI
+ * CreditBalanceV1Response, and Specter's documented 401 bodies. Invented numbers.
+ */
+export const FAKE_BALANCE = { credit_limit: 1000, used: 10, remaining: 990, unlimited: false, daily_cap: 0, daily_used: 0, daily_remaining: 0 }
 
 type Message = { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: { protocolVersion?: string; name?: string } }
 
 export function startFakeSpecter(): FakeSpecter {
   const requests: FakeRequest[] = []
-  const fake = { challenge: true } as FakeSpecter
+  const fake = { challenge: true, keys: new Set<string>() } as FakeSpecter
 
   const answer = (message: Message) => {
     const reply = (result: unknown) => ({ jsonrpc: "2.0", id: message.id, result })
@@ -70,8 +78,15 @@ export function startFakeSpecter(): FakeSpecter {
         return Response.json(Array.isArray(body) ? replies : replies[0])
       }
       requests.push(base)
-      // The REST API: nothing is served yet, because no tool calls it (Slice 7).
-      return Response.json({ message: "Not Found" }, { status: 404 })
+      const requestId = { "x-request-id": crypto.randomUUID() }
+      if (url.pathname === "/api/v1/organization/credits" && request.method === "GET") {
+        const key = request.headers.get("x-api-key")
+        if (!key) return Response.json({ errorCode: "API_KEY_MISSING", message: "No API Key was presented on the header X-API-KEY" }, { status: 401, headers: requestId })
+        if (!fake.keys.has(key)) return Response.json({ errorCode: "API_KEY_NOT_VALID", message: "API key present, but not valid" }, { status: 401, headers: requestId })
+        return Response.json(FAKE_BALANCE, { headers: requestId })
+      }
+      // The rest of the REST API: nothing else is served yet, because no tool calls it (Slice 7).
+      return Response.json({ errorCode: "NOT_FOUND", message: "Not Found" }, { status: 404, headers: requestId })
     },
   })
 

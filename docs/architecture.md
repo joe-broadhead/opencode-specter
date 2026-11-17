@@ -15,7 +15,7 @@ server over OAuth and the plugin's own REST tools, all under the `specter_` pref
 | `src/tool-spec.ts` | The plugin's own tools as specs (opencode-gws's pattern): one spec feeds the model's tool and the scripts' method. |
 | `src/tools.ts` | The namespace description, `OWN_TOOLS`, `isServerTool`, and the count of the server's tools. |
 | `src/credential.ts` | The `specter` key integration, and reading the key at call time. |
-| `src/key-check.ts` | The key check against a free endpoint. A stub until that endpoint is known. |
+| `src/key-check.ts` | The key check: one free `GET /organization/credits` per key, read as Specter's public docs describe the answers. |
 | `src/api/request.ts` | The REST client (opencode-github's structure). No endpoint is called yet. |
 | `src/tools-rpc.ts` | The tools RPC's plugin value and method table, for the source contract's `tools-rpc`. |
 | `src/rpc.ts`, `src/status.ts` | The status contract, `/specter-status` and the status RPC. |

@@ -4,6 +4,7 @@ import { afterAll, describe, expect, test } from "bun:test"
 import { KEY_INTEGRATION_ID, MCP_URL } from "../../src/constants.js"
 import { defaultRules } from "../../src/permissions.js"
 import { isStatus } from "../../src/rpc.js"
+import { DUMMY_KEY } from "../unit/fake.js"
 import { agentRules, cleanup, pluginState, specterServer, startHost, status, until } from "./harness.js"
 
 afterAll(cleanup)
@@ -42,6 +43,39 @@ describe("the plugin in a host", () => {
       await host.close()
     }
   }, 120_000)
+
+  test("checks a connected key against Specter's free credit balance, with the key only in X-API-Key", async () => {
+    const host = await startHost()
+    try {
+      host.fake.keys.add(DUMMY_KEY)
+      await host.client.integration.connect.key({ integrationID: KEY_INTEGRATION_ID, key: DUMMY_KEY, label: "team", location: host.location } as never)
+      const accepted = await until("status reports the key accepted", async () => {
+        const answer = await status(host)
+        return answer.key.check === "accepted" ? answer : undefined
+      })
+      expect(accepted.key).toEqual({ connected: true, label: "team", check: "accepted" })
+      const checks = host.fake.requests.filter((request) => request.path.startsWith("/api/"))
+      expect(checks.map((request) => `${request.method} ${request.path}`)).toEqual(["GET /api/v1/organization/credits"])
+      expect(checks.every((request) => request.apiKey && !request.bearer)).toBe(true)
+      // Status never shows the key.
+      expect(JSON.stringify(accepted)).not.toContain(DUMMY_KEY)
+    } finally {
+      await host.close()
+    }
+    const wrong = await startHost()
+    try {
+      await wrong.client.integration.connect.key({ integrationID: KEY_INTEGRATION_ID, key: DUMMY_KEY, label: "team", location: wrong.location } as never)
+      const rejected = await until("status reports the key rejected", async () => {
+        const answer = await status(wrong)
+        return answer.key.check === "rejected" ? answer : undefined
+      })
+      expect(rejected.key).toEqual({ connected: true, label: "team", check: "rejected" })
+      // The MCP sign-in's step comes first; the fake's server still asks for a sign-in.
+      expect(rejected.nextStep).toBe("Open /mcps, choose specter and sign in.")
+    } finally {
+      await wrong.close()
+    }
+  }, 240_000)
 
   test("adopts the user's own specter entry at Specter's URL, and leaves another URL alone", async () => {
     const own = await startHost({ config: () => ({ mcp: { servers: { specter: { type: "remote", url: MCP_URL, oauth: false, headers: { "X-Test": "invented" } } } } }) })

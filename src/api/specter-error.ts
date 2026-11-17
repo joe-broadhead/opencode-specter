@@ -39,7 +39,7 @@ export const SPECTER_ERROR_CODES = [
 ] as const
 
 /** The 403 codes that refuse a member's `ak_` key itself, rather than one endpoint. */
-const KEY_REFUSALS = new Set(["user_suspended", "api_access_not_granted", "org_key_disabled", "member_keys_disabled", "member_keys_admins_only"])
+export const KEY_REFUSALS: ReadonlySet<string> = new Set(["user_suspended", "api_access_not_granted", "org_key_disabled", "member_keys_disabled", "member_keys_admins_only"])
 
 /** What the plugin makes of one failed response. */
 export interface SpecterError {
