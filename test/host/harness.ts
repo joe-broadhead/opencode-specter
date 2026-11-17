@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import type { OpenCodeClient } from "@opencode/client"
 import { Plugin } from "@opencode/plugin"
 import { PLUGIN_ID, SERVER_NAME } from "../../src/constants.js"
-import { startFakeSpecter } from "./fake-specter.js"
+import { type FakeOptions, startFakeSpecter } from "./fake-specter.js"
 import { routeFetch } from "./route-fetch.js"
 
 import { SpecterRpc, type Status } from "../../src/rpc.js"
@@ -56,6 +56,8 @@ export interface HostInput {
   readonly config?: (origin: string) => Record<string, unknown>
   /** The version the host reports to plugins; defaults to the SDK's. */
   readonly version?: string
+  /** How the fake Specter behaves. */
+  readonly fake?: FakeOptions
 }
 
 let hosts = 0
@@ -64,7 +66,7 @@ export async function startHost(input: HostInput = {}) {
   const base = join(ROOT, `host-${++hosts}`)
   const work = join(base, "work")
   mkdirSync(work, { recursive: true })
-  const fake = startFakeSpecter()
+  const fake = startFakeSpecter(input.fake)
   router.target = fake.origin
   const blockedBefore = router.blocked.length
   const config = {
