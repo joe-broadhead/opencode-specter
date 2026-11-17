@@ -1,5 +1,5 @@
-// What Specter calls cost, as Specter's public docs state it on 2026-11-17. Every fact here is from public docs,
-// unverified live: Slice 0 confirms them with a key and a seat, and Slice 3 checks the MCP tool names against a live
+// What Specter calls cost, as Specter's public docs state it on 2026-11-17. Every fact here is from public docs, not
+// yet confirmed against live calls with a key and a seat, and the MCP tool names are not yet checked against a live
 // `tools/list`. Nothing here decides a permission: the default rules come from the classified tables only
 // (specter-tools.ts). No imports: the status view's bundle may inline this file.
 

@@ -14,7 +14,9 @@ Report a vulnerability privately through GitHub's security advisories for this r
 
 The plugin's own requests go only to Specter's REST API, `https://app.tryspecter.com/api/v1`. OpenCode itself talks
 to Specter's MCP server. No request goes anywhere else. Status waits on no request: with a key connected, it starts
-the key check, one free `GET /organization/credits` per key, in the background, and shows its last answer.
+the key check, one free `GET /organization/credits` per key and again once its answer is 10 minutes old, in the
+background, and shows that key's standing answer: accepted, rejected, not confirmed (an answer that says neither,
+such as a 403 without Specter's error code), or not checked.
 
 ### Credentials
 
@@ -26,7 +28,8 @@ the key check, one free `GET /organization/credits` per key, in the background, 
 - The key is the team's: Specter issues one per team, so it cannot be scoped down, and a leak carries its full rights.
   Rotate it through Specter, never through the plugin: email api-support@tryspecter.com, as Specter's
   [Authentication](https://api.tryspecter.com/api-ref/auth.md) page says, then paste the new key in `/connect` →
-  **Specter** on every machine. The old key then fails with `KEY_REJECTED`.
+  **Specter** on every machine. Status shows the old key as rejected once it re-checks it, which it does when its last answer is more than 10
+  minutes old.
 
 ### Untrusted content
 

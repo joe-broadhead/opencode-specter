@@ -3,23 +3,19 @@
 // (route-fetch.ts) sends https://mcp.tryspecter.com and https://app.tryspecter.com here. It records each request's
 // method, path, JSON-RPC method and whether an API key or a bearer token was present, never their values.
 //
-// The sign-in emulates the metadata Specter's MCP server publishes, as recorded from its public, unauthenticated
-// well-known documents on 2026-11-17 (the gap report; not yet confirmed by a live sign-in):
-// - a 401 from /mcp with `WWW-Authenticate: Bearer scope="openid", resource_metadata="<origin>/.well-known/
-//   oauth-protected-resource/mcp"`;
-// - protected-resource metadata: resource `<origin>/mcp`, authorization server `<origin>/`, scopes `openid`;
-// - authorization-server metadata at `<origin>/.well-known/oauth-authorization-server`: dynamic client registration
-//   (`registration_endpoint`), client ID metadata documents (`client_id_metadata_document_supported: true`), PKCE S256,
-//   token endpoint auth `none` and `private_key_jwt`, grants `authorization_code` and `refresh_token`, and a revocation
-//   endpoint. Specter's Help Center adds the `offline_access` scope.
-// The four endpoint paths (/authorize, /token, /register, /revoke) are the fake's own: the record names the fields, not
-// these paths. The authorization endpoint plays a signed-in browser that consents at once. The tool list is invented
-// and holds no Specter tool name: the real list comes from a live capture.
+// The sign-in serves, verbatim, the metadata Specter's MCP server publishes, fetched from its public, unauthenticated
+// documents on 2026-11-17 (PROTECTED_RESOURCE and AUTHORIZATION_SERVER below, and its 401 challenge), at the same two
+// paths; every other well-known path answers 404, as Specter's does. The one change is the `cimd` option: false sets
+// `client_id_metadata_document_supported` to false, to test dynamic client registration too. The endpoints are at
+// Specter's paths; the authorization endpoint plays a signed-in browser that consents at once and returns `iss`, as
+// `authorization_response_iss_parameter_supported` promises. Not yet confirmed by a live sign-in: what the endpoints
+// return, such as whether a refresh token comes without `offline_access`. The tool list is invented and holds no
+// Specter tool name: the real list comes from a live capture.
 
 /** Specter's MCP host, as the plugin and OpenCode address it; the router sends it to this fake. */
 export const SPECTER_MCP_ORIGIN = "https://mcp.tryspecter.com"
-/** The scope Specter's challenge and metadata name, and the one its Help Center adds. */
-export const SCOPES = ["openid", "offline_access"] as const
+/** The one scope Specter's challenge and metadata name. */
+export const SCOPES = ["openid"] as const
 
 /** Invented tools, standing in for Specter's until the capture: names no Specter server is known to serve. */
 export const FAKE_TOOLS = [
@@ -69,26 +65,36 @@ export interface FakeSpecter {
 
 type Message = { jsonrpc: "2.0"; id?: string | number | null; method: string; params?: { protocolVersion?: string; name?: string } }
 
-/** The protected-resource metadata Specter publishes, for a server at `origin`. */
-export const protectedResource = (origin: string) => ({ resource: `${origin}/mcp`, authorization_servers: [`${origin}/`], scopes_supported: ["openid"] })
+/** https://mcp.tryspecter.com/.well-known/oauth-protected-resource/mcp, verbatim, fetched 2026-11-17. */
+export const PROTECTED_RESOURCE = {
+  resource: "https://mcp.tryspecter.com/mcp",
+  authorization_servers: ["https://mcp.tryspecter.com/"],
+  scopes_supported: ["openid"],
+  bearer_methods_supported: ["header"],
+} as const
 
-/** The authorization-server metadata Specter publishes, for an issuer at `origin`; the endpoint paths are the fake's. */
-export const authorizationServer = (origin: string, options: FakeOptions = {}) => ({
-  issuer: `${origin}/`,
-  authorization_endpoint: `${origin}/authorize`,
-  token_endpoint: `${origin}/token`,
-  registration_endpoint: `${origin}/register`,
-  revocation_endpoint: `${origin}/revoke`,
-  client_id_metadata_document_supported: options.cimd !== false,
+/** https://mcp.tryspecter.com/.well-known/oauth-authorization-server, verbatim, fetched 2026-11-17. */
+export const AUTHORIZATION_SERVER = {
+  issuer: "https://mcp.tryspecter.com/",
+  authorization_endpoint: "https://mcp.tryspecter.com/authorize",
+  token_endpoint: "https://mcp.tryspecter.com/token",
+  registration_endpoint: "https://mcp.tryspecter.com/register",
+  scopes_supported: ["openid"],
   response_types_supported: ["code"],
   grant_types_supported: ["authorization_code", "refresh_token"],
-  code_challenge_methods_supported: ["S256"],
   token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
-  scopes_supported: [...SCOPES],
-})
+  revocation_endpoint: "https://mcp.tryspecter.com/revoke",
+  revocation_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+  code_challenge_methods_supported: ["S256"],
+  client_id_metadata_document_supported: true,
+  authorization_response_iss_parameter_supported: true,
+} as const
 
-/** Specter's 401 challenge from /mcp, for a server at `origin`. */
-export const challengeHeader = (origin: string) => `Bearer scope="openid", resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp"`
+/** The authorization-server metadata the fake serves: Specter's, with CIMD switched off when `cimd` is false. */
+export const authorizationServer = (options: FakeOptions = {}) => ({ ...AUTHORIZATION_SERVER, client_id_metadata_document_supported: options.cimd !== false })
+
+/** Specter's 401 challenge from /mcp, verbatim, fetched 2026-11-17. */
+export const CHALLENGE = 'Bearer scope="openid", resource_metadata="https://mcp.tryspecter.com/.well-known/oauth-protected-resource/mcp"'
 
 export interface FakeOptions {
   /**
@@ -125,13 +131,13 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
     }
   }
 
-  /** The sign-in server: both metadata documents and the four endpoints, at Specter's public origin. */
+  /** The sign-in server: the two metadata documents Specter serves, and its four endpoints. */
   const signIn = async (request: Request, url: URL): Promise<Response> => {
-    const origin = SPECTER_MCP_ORIGIN
     const route = url.pathname
     if (route.startsWith("/.well-known/")) discovery.push(route)
-    if (route === "/.well-known/oauth-protected-resource/mcp" || route === "/.well-known/oauth-protected-resource") return json(200, protectedResource(origin))
-    if (route === "/.well-known/oauth-authorization-server" || route === "/.well-known/openid-configuration") return json(200, authorizationServer(origin, options))
+    if (route === "/.well-known/oauth-protected-resource/mcp") return json(200, PROTECTED_RESOURCE)
+    if (route === "/.well-known/oauth-authorization-server") return json(200, authorizationServer(options))
+    if (route.startsWith("/.well-known/")) return new Response("Not Found", { status: 404 })
     if (route === "/register" && request.method === "POST") {
       const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
       const clientId = `fake-client-${registered.size + 1}`
@@ -152,6 +158,7 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
       const target = new URL(query.get("redirect_uri") ?? "/")
       target.searchParams.set("code", `fake-code-${++codes}`)
       if (query.get("state")) target.searchParams.set("state", query.get("state")!)
+      target.searchParams.set("iss", AUTHORIZATION_SERVER.issuer)
       return new Response(null, { status: 302, headers: { location: target.toString() } })
     }
     if (route === "/token" && request.method === "POST") {
@@ -159,7 +166,7 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
       tokens.push({ grant: form.grant_type ?? "", verifier: typeof form.code_verifier === "string" && form.code_verifier.length >= 43, resource: form.resource ?? null })
       const token = `fake-access-${tokens.length}`
       issued.add(token)
-      return json(200, { access_token: token, token_type: "Bearer", expires_in: 3600, refresh_token: `fake-refresh-${tokens.length}`, scope: SCOPES.join(" ") })
+      return json(200, { access_token: token, token_type: "Bearer", expires_in: 3600, refresh_token: `fake-refresh-${tokens.length}`, scope: form.scope ?? SCOPES.join(" ") })
     }
     if (route === "/revoke" && request.method === "POST") return new Response(null, { status: 200 })
     return json(404, { error: "not_found" })
@@ -182,7 +189,7 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
         if (messages.length === 0) requests.push(base)
         for (const message of messages) requests.push({ ...base, rpc: message.method })
         const token = authorization.replace(/^Bearer\s+/i, "")
-        if (fake.challenge && !issued.has(token)) return new Response(JSON.stringify({ error: "invalid_token" }), { status: 401, headers: { "content-type": "application/json", "www-authenticate": challengeHeader(SPECTER_MCP_ORIGIN) } })
+        if (fake.challenge && !issued.has(token)) return new Response(JSON.stringify({ error: "invalid_token" }), { status: 401, headers: { "content-type": "application/json", "www-authenticate": CHALLENGE } })
         if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } })
         const replies = messages.filter((message) => message.id !== undefined && message.id !== null).map(answer)
         if (replies.length === 0) return new Response(null, { status: 202 })

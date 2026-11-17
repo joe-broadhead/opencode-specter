@@ -7,7 +7,7 @@ import { registerToolsRpc } from "@we-the-rebel-alliance/source-contract/tools-r
 import { errorText, PLUGIN_ID, SERVER_NAME } from "./constants.js"
 import { keyReader, registerKeyIntegration } from "./credential.js"
 import { checkHost } from "./host-version.js"
-import { type KeyCheck, keyChecker } from "./key-check.js"
+import { keyChecker } from "./key-check.js"
 import { loadOptions } from "./options.js"
 import { registerPermissionDefaults } from "./permissions.js"
 import { reasonOf } from "./redact.js"
@@ -28,8 +28,9 @@ type RemoteConfig = Extract<Mcp.ServerConfig, { type: "remote" }>
 type Registration = { dispose(): Promise<void> }
 
 /**
- * No protocol, codemode, timeout or headers: the host defaults apply, and OpenCode runs the server's OAuth sign-in.
- * TODO(Slice 4, B2): an `oauth` scope or client setting, once Specter's sign-in flow is known; none is guessed here.
+ * No protocol, codemode, timeout, headers or `oauth` setting: the host defaults apply, and OpenCode runs the server's
+ * OAuth sign-in from Specter's published metadata (scope `openid`, PKCE, a client ID metadata document or dynamic
+ * registration). The host tests complete that sign-in against a fake serving the metadata verbatim.
  */
 export const serverConfig = (seam: SpecterSeam): RemoteConfig => ({
   type: "remote",
@@ -121,8 +122,7 @@ export function createSpecterPlugin(seam: SpecterSeam) {
         )
         keep(await registerKeyIntegration(ctx, report("integration")))
         const readKey = keyReader(ctx.integration, warn)
-        const checkKey = keyChecker()
-        let lastCheck: KeyCheck = "unchecked"
+        const keys = keyChecker()
         keep(
           await registerStatus(ctx, {
             access: options.access,
@@ -132,12 +132,13 @@ export function createSpecterPlugin(seam: SpecterSeam) {
             tools: tools.tools,
             key: async () => {
               const key = await readKey()
-              // The check asks Specter's free credit balance once per key, in the background; status only reads its
-              // last answer, so status itself never waits on Specter.
-              if (key) void checkKey(key.key).then((result) => void (lastCheck = result))
+              // The check asks Specter's free credit balance once per key, and again once its answer is ten minutes
+              // old, in the background; status reads only that key's standing answer, so it never waits on Specter
+              // and never shows one key's answer for another.
+              if (key) void keys.check(key.key)
               return key
             },
-            keyCheck: () => lastCheck,
+            keyCheck: (key) => keys.last(key),
             skills: SKILL_IDS.map((id) => ({ id, path: skillPath(id) })),
             problems: () => [...problems.values()],
             needsKey: OWN_SPECS.length > 0,

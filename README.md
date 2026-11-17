@@ -108,8 +108,10 @@ the key in `opencode.json`.
 
 To rotate the team key, for example after it leaked, email api-support@tryspecter.com, as Specter's
 [Authentication](https://api.tryspecter.com/api-ref/auth.md) page says. Then everyone pastes the new key in `/connect` →
-**Specter**. Until they do, calls with the old key fail with `KEY_REJECTED`, and `/specter-status` shows the key as
-rejected by Specter.
+**Specter**. Until they do, the old key is refused. `/specter-status` asks Specter about a key the first time it sees
+it, and again once the last answer is more than 10 minutes old, in the background: a few seconds after such a
+`/specter-status`, it shows the old key as rejected by Specter, with no restart. While that check runs, it shows the
+key as not checked. The plugin's own tools, when they arrive, fail with `KEY_REJECTED` on the old key at once.
 
 ## Troubleshooting
 

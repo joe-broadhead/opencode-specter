@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { request, type RequestDeps, upstreamError } from "../../src/api/request.js"
 import { keyReader } from "../../src/credential.js"
-import { formatStatus } from "../../src/rpc.js"
+import { formatStatus, isStatus } from "../../src/rpc.js"
 import { computeStatus } from "../../src/status.js"
 import { DUMMY_KEY } from "./fake.js"
 
@@ -88,5 +88,33 @@ describe("the team key", () => {
     expectClean(status)
     expectClean(formatStatus(status))
     expectClean(logged.join("\n"))
+  })
+
+  it("asks status for this key's own answer, and shows an unconfirmed one as not confirmed, with its own next step", async () => {
+    const { fake } = integration()
+    const read = keyReader(fake, (message) => console.warn(message))
+    const ctx = {
+      mcp: { list: async () => ({ data: [{ name: "specter", status: { status: "connected" } }] }) },
+      agent: { list: async () => ({ data: [] }) },
+      skill: { list: async () => ({ data: [] }) },
+    }
+    const asked: string[] = []
+    const status = await computeStatus(ctx as never, {
+      access: "all",
+      hostVersion: "2.2.3",
+      source: () => ({ type: "plugin", url: "https://mcp.example.invalid/mcp" }),
+      tools: () => ({ visible: 0, unknown: [] }),
+      key: read,
+      keyCheck: (key) => (asked.push(key), "unconfirmed"),
+      skills: [],
+      problems: () => [],
+      needsKey: true,
+    })
+    expect(asked).toEqual([DUMMY_KEY])
+    expect(isStatus(status)).toBe(true)
+    expect(status.key.check).toBe("unconfirmed")
+    expect(status.nextStep).toMatch(/neither accepted nor refused the team API key/)
+    expect(formatStatus(status)).toMatch(/Team API key: connected \(Team key\), not confirmed/)
+    expectClean(status)
   })
 })

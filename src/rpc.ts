@@ -9,7 +9,7 @@ import { MCP_CREDIT_USE } from "./costs.js"
 export const STATES = ["connected", "sign_in_required", "connecting", "failed", "disabled", "not_configured", "conflict"] as const
 const EFFECTS = ["allow", "ask", "deny"] as const
 const SOURCES = ["plugin", "adopted", "conflict"] as const
-const KEY_CHECKS = ["accepted", "rejected", "unchecked"] as const
+const KEY_CHECKS = ["accepted", "rejected", "unconfirmed", "unchecked"] as const
 
 export type Rule = { readonly action: string; readonly resource: string; readonly effect: (typeof EFFECTS)[number] }
 export type SkillPath = { readonly id: string; readonly path: string }
@@ -148,6 +148,7 @@ const ACCESS_TEXT: Record<Access, string> = {
 const KEY_CHECK_TEXT: Record<Status["key"]["check"], string> = {
   accepted: "accepted by Specter",
   rejected: "rejected by Specter",
+  unconfirmed: "not confirmed: Specter's answer neither accepted nor refused it",
   unchecked: "not checked",
 }
 
@@ -180,9 +181,9 @@ export function statusRows(status: Status): StatusRow[] {
     { label: "Connection", value: STATE_LABELS[status.state] },
     { label: "Server", value: describeServer(status.server) },
     { label: "Team API key", value: describeKey(status.key) },
-    // The two sign-ins are separate: the MCP sign-in is per person, the key is the team's (SPEC.md §5).
+    // The two sign-ins are separate: the MCP sign-in is per person, the key is the team's.
     { label: "Sign-ins", value: "the MCP sign-in is yours alone; the team API key is shared, and every call with it spends from one credit pool" },
-    // From Specter's public docs (costs.ts); Slice 0 confirms it live.
+    // From Specter's public docs (costs.ts), not yet confirmed against live calls.
     { label: "MCP credit use", value: MCP_CREDIT_USE },
     { label: "Access", value: ACCESS_TEXT[status.access] },
     { label: "Tools", value: describeTools(status.tools) },
