@@ -132,7 +132,8 @@ export function createSpecterPlugin(seam: SpecterSeam) {
             tools: tools.tools,
             key: async () => {
               const key = await readKey()
-              // The check is a stub until Slice 5 and sends nothing; status only reads its last answer.
+              // The check asks Specter's free credit balance once per key, in the background; status only reads its
+              // last answer, so status itself never waits on Specter.
               if (key) void checkKey(key.key).then((result) => void (lastCheck = result))
               return key
             },

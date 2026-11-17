@@ -63,7 +63,7 @@
     "@opentui/solid": "0.8.0",
     "@types/bun": "1.4.4",
     "@types/node": "24.19.2",
-    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.1.0",
+    "@we-the-rebel-alliance/source-contract": "github:we-the-rebel-alliance/source-contract#v0.2.0",
     "babel-preset-solid": "1.9.16",
     "esbuild": "0.28.2",
     "solid-js": "1.9.18",
@@ -106,6 +106,7 @@
     "title": "Specter",
     "summary": "Specter deal data: companies, their profiles and signals.",
     "icon": "assets/icon.svg",
+    "cost": "Specter bills in credits from the team's one pool and publishes no price per credit. Each person gets 100 MCP tool calls a day; past that, calls spend team credits only if a Specter admin allows it. Calls with the team key spend credits per result; checking the key is free.",
     "tools": [],
     "skills": [
       "specter",
@@ -117,14 +118,21 @@
       {
         "id": "account",
         "label": "Specter account",
-        "server": "specter",
-        "group": "specter"
+        "server": "specter"
       },
       {
         "id": "specter",
-        "label": "Specter",
+        "label": "Specter team API key",
         "integration": "specter",
-        "group": "specter"
+        "required": false,
+        "help": {
+          "url": "https://app.tryspecter.com/settings/api-console",
+          "label": "Copy the team API key from Specter's API Console"
+        },
+        "needed": [
+          "AUTH_REQUIRED",
+          "KEY_REJECTED"
+        ]
       }
     ],
     "contributes": {

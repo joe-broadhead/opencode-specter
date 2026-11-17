@@ -12,7 +12,13 @@ All notable changes to this project are documented here. The format follows [Kee
 - The `specter` key integration for the team's API key, with one `key` method and no environment variable.
 - The `access` option (`all`, the default; `ask-changes`; `read-only`) over three tool classes, `read`, `spend` and
   `write`, with tools not yet classified treated like changes; and the `requestTimeoutMs` option.
-- `/specter-status`, the `/specter` dialog and the status RPC, with no upstream call.
-- A REST client with retries for free reads only, honouring `Retry-After`, and never for a call that spends credits.
-  Retrying is new to the family.
-- The `specter` and `specter-write` skills, as placeholders.
+- `/specter-status`, the `/specter` dialog and the status RPC, which wait on no upstream call.
+- A REST client with retries for free reads only, waiting the seconds Specter names in `X-RateLimit-Reset` on a 429,
+  and never for a call that spends credits or after a 402. Retrying is new to the family.
+- Specter's error object mapped to the plugin's codes: `KEY_REJECTED`, `OUT_OF_CREDITS`, `DAILY_CREDIT_CAP_REACHED`,
+  and `UPSTREAM_ERROR` with Specter's error code and request ID, from Specter's public Errors page.
+- The key check: one free `GET /organization/credits` per key, shown in `/specter-status` as accepted or rejected.
+- What Specter calls cost, from Specter's public pages with their sources (`docs/costs.md`), the MCP allowance in
+  status, and an honest `jelly.cost` line.
+- Two separate sign-ins in Jelly: the MCP account, and the optional team key with a link to Specter's API Console.
+- The `specter` and `specter-write` skills, which name no tools yet.

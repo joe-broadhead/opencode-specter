@@ -15,8 +15,10 @@ server over OAuth and the plugin's own REST tools, all under the `specter_` pref
 | `src/tool-spec.ts` | The plugin's own tools as specs (opencode-gws's pattern): one spec feeds the model's tool and the scripts' method. |
 | `src/tools.ts` | The namespace description, `OWN_TOOLS`, `isServerTool`, and the count of the server's tools. |
 | `src/credential.ts` | The `specter` key integration, and reading the key at call time. |
-| `src/key-check.ts` | The key check against a free endpoint. A stub until that endpoint is known. |
-| `src/api/request.ts` | The REST client (opencode-github's structure). No endpoint is called yet. |
+| `src/key-check.ts` | The key check: one free `GET /organization/credits` per key, read as Specter's public docs describe the answers. |
+| `src/api/request.ts` | The REST client (opencode-github's structure). No tool calls it yet. |
+| `src/api/specter-error.ts` | Specter's error object, mapped to the plugin's codes, from Specter's public Errors page. |
+| `src/costs.ts` | Specter's published costs, with their sources (`docs/costs.md`). Decides no permission. |
 | `src/tools-rpc.ts` | The tools RPC's plugin value and method table, for the source contract's `tools-rpc`. |
 | `src/rpc.ts`, `src/status.ts` | The status contract, `/specter-status` and the status RPC. |
 | `src/tui/index.tsx` | The `/specter` status dialog. |
@@ -45,12 +47,15 @@ REST origin, under its base path, in `X-API-Key`.
 
 Redirects are handled by hand: a change never follows one, and a read follows one only within the REST base. Bodies are
 read up to 10 MB and results capped at 100 KB inline. A `read` (free) call is retried on 429 and 5xx with backoff and
-jitter that honour `Retry-After`; a `spend` call is never retried, because it may already have been charged, and a
-`write` call is not retried because it is not known to be idempotent. These retries are new to the family.
+jitter: a 429 waits the seconds in `X-RateLimit-Reset`, a 5xx waits `Retry-After` when Specter names one; a `spend` call is never retried, because it may already have been charged, and a
+`write` call is not retried because it is not known to be idempotent. 400, 401, 402, 403, 404 and 422 are never
+retried, as Specter's [Errors](https://api.tryspecter.com/api-ref/errors.md) page says. `src/api/specter-error.ts` maps
+Specter's `{ errorCode, message }` to the plugin's codes, naming `errorCode` and `X-Request-ID` but never Specter's
+message. These retries are new to the family.
 
 ## Status, RPC and the TUI view
 
-`/specter-status`, the `/specter` dialog and the status RPC render one status model. Status makes no upstream call.
+`/specter-status`, the `/specter` dialog and the status RPC render one status model. Status waits on no upstream call; with a key connected it starts the free key check in the background.
 
 ## Tools RPC
 

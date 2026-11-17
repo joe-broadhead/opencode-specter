@@ -68,4 +68,11 @@ Every code the plugin's own code raises, with when it happens. Each message ends
 | `API_REDIRECT_LOOP` | Specter redirected more than 5 times. |
 | `API_REDIRECT_INSECURE` | Specter redirected to a non-HTTPS address. |
 | `API_REDIRECT_OFF_HOST` | Specter redirected a read outside its REST API; the key is never sent there. |
-| `UPSTREAM_ERROR` | Specter answered with an error status. TODO(Slice 6): Specter's error object is not recorded yet; the messages become specific once it is. |
+| `KEY_REJECTED` | Specter answered 401, or a 403 whose `errorCode` refuses the key itself (such as `api_access_not_granted`). |
+| `OUT_OF_CREDITS` | Specter answered 402 with `OUT_OF_CREDITS` (or a 402 without the daily code): the period's credit budget is spent. |
+| `DAILY_CREDIT_CAP_REACHED` | Specter answered 402 with `DAILY_CREDIT_CAP_REACHED`; the next step gives `X-CreditLimit-Daily-Reset`'s wait when Specter sends it. |
+| `UPSTREAM_ERROR` | Specter answered with another error status: 403 `NOT_PERMITTED` (the plan does not include the endpoint), 404, 422 (including `NEW_RESULTS_AFTER_BEYOND_RETENTION`, a saved-search cutoff older than 60 days), 429 or 5xx. The message names Specter's `errorCode` and `X-Request-ID`, never Specter's own message, which stays in the result's untrusted data. |
+
+These meanings come from Specter's public [Errors](https://api.tryspecter.com/api-ref/errors.md) and
+[Rate Limits & Credit Limits](https://api.tryspecter.com/api-ref/rate_limits.md) pages and are not yet confirmed
+against live responses.

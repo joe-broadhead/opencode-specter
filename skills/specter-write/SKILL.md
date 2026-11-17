@@ -7,7 +7,7 @@ If Specter's tools are absent, run `/connect` and sign in to Specter (the `spect
 
 # Spending credits and changing Specter
 
-Scaffold: this skill is a placeholder until the plugin has tools that spend credits or change data.
+Not yet: this skill names no tools, because the plugin has none that spend credits or change data so far.
 
 ## Rules that already hold
 
