@@ -69,9 +69,13 @@ with no model, as a session and its agent, under a prior allow. The table is the
 ## The saved-search source
 
 `specter.saved` is declared in `package.json`'s `sources`, so a consumer reads it from the installed package, never over
-RPC. `events_list` reads `GET /searches/companies/{searchId}/results` with the cursor's watermark, and asserts
+RPC. `events_list` reads `GET /searches/companies/{searchId}/results` with the cursor's watermark — and, after the first
+page, the previous page's tail again, which is how a shifted offset is recovered — and asserts
 `specter_events_list` and `specter.read` on `<account>:searches.companies.results`; `probe` asks the free
 `GET /organization/credits` and asserts `specter_probe` alone. The two operations a source read asserts on a resource
 are allowed at every access by two rules at the end of the default block, so a read the host allows is not asked about
-again underneath. `npm run conformance` runs the source contract's kit over recorded Specter answers and writes
-`reports/conformance-report.json`; the report must say `ok: true`. No module in this plugin has called Specter.
+again underneath. The cursor is four small fields (watermark, the window's first observation, page, and a 16-hex hash
+per company the last read saw); its worst case is 922 characters against the contract's 1,024, and that budget is
+checked before a read so no credit is spent on a page whose cursor could not be issued. `npm run conformance` runs the
+source contract's kit over recorded Specter answers and writes `reports/conformance-report.json`; the report must say
+`ok: true`. No module in this plugin has called Specter.

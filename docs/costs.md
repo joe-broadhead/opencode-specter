@@ -74,7 +74,14 @@ Each REST reference page states its exact cost in a note at the top; that note i
 
 A page reports what it spent as `cost: { units: [{ per: "credit", count }] }`: the number of results Specter returned,
 the refused ones included, because it charged for them. There is no dollar figure, because Specter publishes none. The
-source's `sources` declaration states the same unit, and its `conditions` say that the zero it carries is not a price.
+source's `sources` declaration states the same unit, and its `conditions` say that the zero it carries is not a price
+(source-contract v0.2.0 requires a `usd` figure for a metered source; this plugin does not invent one).
+
+The source's own reads cost a little more than the companies they list, and that is by design: after the first page it
+re-reads the previous page's last five companies, and the next window starts two minutes before the previous window's
+first answer. Every company Specter returns is charged, so a poll can cost a few credits more than the events it
+carries. A body cut at the read's 8 MB inline limit fails the page instead (`UNAVAILABLE`), so a cut answer is never
+listed as a short one.
 
 ## What a credit costs
 

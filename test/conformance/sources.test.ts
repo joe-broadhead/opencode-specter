@@ -37,8 +37,12 @@ const KEY = "specter_team_key_for_tests"
 const CALL: SourceCall = { sessionID: "ses_conformance", agent: "build", messageID: "msg_script", id: "script:conformance", signal: new AbortController().signal }
 /** The plugin's tools, as a manifest declares them: every one a source names must be read-only. */
 const TOOLS = Object.entries(OWN_TOOL_CLASSES).map(([id, toolClass]) => ({ id, readOnly: toolClass === "read" }))
-/** One GET answers a whole page, so no single company can fail on its own. */
-const ATOMIC = "Specter answers one page of a saved search's results in one GET, so no single company can fail on its own"
+/**
+ * One GET answers a whole page, and the source fails the whole page rather than dropping an item: a body cut at the
+ * inline cap, or a company record the plugin does not recognise, is UNAVAILABLE with the cursor held, so `failed[]`
+ * (a retryable per-item drop) can never be produced.
+ */
+const ATOMIC = "Specter answers one page of a saved search's results in one GET, and an item the plugin cannot read fails the whole page (UNAVAILABLE, cursor held), so no single company is ever dropped on its own"
 /** `probe`'s and `events_list`'s own failures, as the plugin raises them. */
 const deps = (context: SessionContext): SourceDeps => ({
   access: async () => ({ key: KEY, read: provider() }),
@@ -70,18 +74,18 @@ const cases: PageCase[] = []
   const first = await cursorFor({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE })
   const done = await cursorFor({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: first })
   const stale = new Date(NOW - (RETENTION_DAYS + 1) * 86_400_000).toISOString()
-  const elsewhere = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, i: [] })
+  const elsewhere = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, k: [] })
   cases.push(
     { name: "a first listing from since, one company refused for a secret in its name", input: { source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, expect: "page" },
     { name: "what came after the first listing: the inclusive boundary's repeat is dropped", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: first }, expect: "page" },
     { name: "the first listing two at a time, so the window pages", input: { source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE, limit: 2 }, expect: "page" },
     { name: "nothing new since the last listing", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: done }, expect: "empty" },
-    { name: "a cursor whose watermark is older than Specter's 60-day window", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, i: [] }) }, expect: "expired" },
+    { name: "a cursor whose watermark is older than Specter's 60-day window", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, k: [] }) }, expect: "expired" },
     { name: "a cursor for another saved search", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: elsewhere }, expect: { refuses: "CURSOR_INVALID" } },
     { name: "a read that names no saved search", input: { source: "saved", account: ACCOUNT }, expect: { refuses: "INPUT_INVALID" } },
     { name: "another source's name", input: { source: "companies", account: ACCOUNT, scope: SCOPE }, expect: { refuses: "SOURCE_UNKNOWN" } },
     { name: "another account", input: { source: "saved", account: "someone", scope: SCOPE }, expect: { refuses: "ACCOUNT_MISMATCH" } },
-    { name: "a cursor bound to another plugin", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, i: [] }) }, expect: { refuses: "CURSOR_INVALID" } },
+    { name: "a cursor bound to another plugin", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, k: [] }) }, expect: { refuses: "CURSOR_INVALID" } },
   )
 }
 
@@ -142,9 +146,12 @@ describe("the source contract's conformance kit", () => {
       private: true,
       maxBytes: 65_536,
       scope: { keys: ["search"], suggest: { tool: "list_saved_searches", operations: ["searches.list"] } },
-      permission: { events: "specter_events_list", operations: ["searches.companies.results"], identity: [] },
-      cost: { class: "metered", units: [{ per: "credit", usd: 0 }], probe: { per: "call", usd: 0 } },
+      permission: { events: "specter_events_list", operations: ["searches.companies.results"] },
+      cost: { class: "metered", units: [{ per: "credit", usd: 0, conditions: expect.any(String) }], probe: { per: "call", usd: 0 } },
     })
+    // A consumer on v0.1.x refuses `permission.identity: []` ("expected array to have >=1 items"), so it is omitted:
+    // v0.2.0 reads an absent `identity` as undeclared, and the probe asserts its action alone.
+    expect(source.permission).not.toHaveProperty("identity")
   })
 
   test("the owner probe names is the key's organisation, never a person", async () => {

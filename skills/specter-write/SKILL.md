@@ -14,7 +14,7 @@ too once a person's 100 daily calls are used up.
 | --- | --- |
 | `specter_get_company` | 1 credit per result returned; a company Specter does not know costs nothing, because the call fails. |
 | `specter_saved_search_results` | 1 credit per result returned, so the page's `limit` is the most it can cost. |
-| `specter_events_list` | 1 credit per company returned, the refused ones included. A page holds at most 25. |
+| `specter_events_list` | 1 credit per company Specter returned; its lookback and page overlap re-read a few, so a poll can cost a little more than the events it lists. A page holds at most 25. |
 
 `specter_search_companies` and `specter_list_saved_searches` are free, and so is `specter_probe`.
 

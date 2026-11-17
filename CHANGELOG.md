@@ -25,10 +25,13 @@ All notable changes to this project are documented here. The format follows [Kee
   (Find company ID, free), `specter_get_company`, `specter_list_saved_searches` (free) and
   `specter_saved_search_results`, each stating its published credit cost.
 - The `specter.saved` source under the source contract: the companies Specter added to one saved company search since
-  a cursor, as events, with the saved search's id as the scope key. Its cursor holds a watermark, the page within the
-  window and the ids of the page just listed, so a burst of additions drains page by page, the inclusive cutoff never
-  repeats a company, and a cursor older than Specter's 60-day window answers `gap` once and restarts after it instead
-  of sliding forward.
+  a cursor, as events, with the saved search's id as the scope key. Its cursor holds the window's watermark, the page
+  within it and a 16-hex hash per company the last read saw (worst case 922 characters, checked before any read), so a
+  burst drains page by page without jamming. A two-minute lookback and a five-company page overlap catch companies
+  added mid-window, shifted by a re-match, or visible late; both re-reads are charged, and repeats are dropped by id.
+  A cursor older than Specter's 60-day window answers `gap` once, with `more: true`, and restarts at the window's edge
+  rather than at "now". A cut answer or an unrecognised record fails the page (`UNAVAILABLE`) with the cursor held, so
+  no company is lost and the credits reported are what Specter returned.
 - `specter_probe`, which names the team key's organisation from Specter's free credit-balance call.
 - `npm run conformance` runs the source contract's conformance kit over recorded Specter answers and writes
   `reports/conformance-report.json` with `ok: true`.

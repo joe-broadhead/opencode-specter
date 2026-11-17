@@ -4,7 +4,7 @@ import { type SourceEvent, parseSourceError } from "@we-the-rebel-alliance/sourc
 import type { EventsListResult } from "@we-the-rebel-alliance/source-contract/events"
 import {
   ACCOUNT,
-  BOUNDARY_IDS,
+  MAX_CARRIED,
   MAX_PAGE,
   RETENTION_DAYS,
   type Read,
@@ -80,9 +80,11 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(cursor.length).toBeLessThanOrEqual(1024)
     const state = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Record<string, unknown>
     expect(state["s"]).toBe("saved")
-    expect(state["i"]).toEqual(expect.any(Array))
-    // The window is done, so the watermark is this read's observation time and the page's ids are carried.
-    expect(state["w"]).toBe(FIXTURE.now)
+    // Hashes, never ids: 16 hex characters each, whatever the ids' length.
+    expect(state["k"]).toEqual(expect.any(Array))
+    for (const hash of state["k"] as string[]) expect(hash).toMatch(/^[0-9a-f]{16}$/)
+    // The window is done, so the watermark is the lookback line before its first observation, and the page is 0.
+    expect(state["w"]).toBe(new Date(NOW - 120_000).toISOString())
     expect(state["p"]).toBe(0)
   })
 
@@ -119,23 +121,25 @@ describe("specter.saved: a saved company search's net-new results", () => {
   it("answers an older watermark as gap { reason: expired } once, and restarts after it without sliding", async () => {
     const read = provider()
     const stale = new Date(NOW - (RETENTION_DAYS + 1) * 86_400_000).toISOString()
-    const cursor = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, i: [] })
+    const cursor = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, k: [] })
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor }, read)
     expect(page.gap).toEqual({ reason: "expired", since: stale })
     expect(page.events).toEqual([])
     expect(page.cost).toBeUndefined()
+    // A gap asks the consumer to read on at once, from the earliest line Specter can still serve.
+    expect(page.more).toBe(true)
     // The 60-day window is checked before any call, so a gap costs nothing.
     expect(read.calls).toEqual([])
-    // The cursor it answers restarts at the earliest line the cursor itself can justify — the stale watermark plus
-    // Specter's window, never "now" — and the lost window is recorded beside it.
+    // The restart line is the window's edge, not "now": everything Specter still holds is listed rather than skipped.
     const restart = JSON.parse(Buffer.from(page.cursor, "base64url").toString("utf8")) as Record<string, unknown>
-    expect(restart["w"]).toBe(new Date(NOW - 86_400_000).toISOString())
-    expect(restart["g"]).toBe(stale)
+    expect(restart["w"]).toBe(new Date(NOW - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
+    expect(restart).not.toHaveProperty("g")
 
-    // The same expired cursor read again answers the same gap and the same restart line: a retry cannot slide it.
+    // The same expired cursor read again answers the same gap. Its restart is the window's edge for that read, which
+    // is never "now": the sixty days Specter still holds are always re-read, at worst a minute of them twice.
     const again = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor }, read, NOW + 600_000)
     expect(again.gap).toEqual({ reason: "expired", since: stale })
-    expect(again.cursor).toBe(page.cursor)
+    expect(JSON.parse(Buffer.from(again.cursor, "base64url").toString("utf8"))["w"]).toBe(new Date(NOW + 600_000 - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
 
     // A company added a minute after the restart must be listed by the next read, however late the read happens: the
     // watermark comes from the cursor, never from "now".
@@ -146,7 +150,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(next.gap).toBeUndefined()
     // The read that answered the gap set the window; a read an hour later still asks from that line, not from its own
     // clock, so nothing between them is skipped.
-    expect((read.calls.at(-1)!.query ?? {})["new_results_after"]).toBe(new Date(NOW - 86_400_000).toISOString())
+    expect((read.calls.at(-1)!.query ?? {})["new_results_after"]).toBe(new Date(NOW - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
   })
 
   it("answers Specter's own retention error as the same gap, never as an upstream failure", async () => {
@@ -163,9 +167,9 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: { search: "not-a-number" } }, read))).code).toBe("INPUT_INVALID")
     expect((await refused(list({ source: "other", account: ACCOUNT, scope: SCOPE }, read))).code).toBe("SOURCE_UNKNOWN")
     expect((await refused(list({ source: "saved", account: "someone", scope: SCOPE }, read))).code).toBe("ACCOUNT_MISMATCH")
-    const foreign = encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, i: [] })
+    const foreign = encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, k: [] })
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: foreign }, read))).code).toBe("CURSOR_INVALID")
-    const otherSearch = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, i: [] })
+    const otherSearch = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, k: [] })
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: otherSearch }, read))).code).toBe("CURSOR_INVALID")
   })
 
@@ -175,7 +179,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, read))).code).toBe("NEEDS_SIGN_IN")
     read.failNext(failure(402, "OUT_OF_CREDITS", { creditsReset: 900 }))
     const budget = await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, read))
-    expect(budget.code).toBe("BUDGET_EXCEEDED")
+    expect(budget.code).toBe("RATE_LIMITED")
     read.failNext(failure(429, "RATE_LIMITED", { rateReset: 2 }))
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, read))).code).toBe("RATE_LIMITED")
     read.failNext(failure(404, "NOT_FOUND"))
@@ -190,12 +194,23 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(result.next).toMatch(/^Run \/connect, choose Specter/)
   })
 
+  it("pulls the local clock back when an answer carries no Date, so it can only ask for more", async () => {
+    const read = provider()
+    const first = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, read)
+    // An answer with no Date header: the watermark is the plugin's clock minus CLOCK_MARGIN_MS, never the raw clock.
+    const { observation, CLOCK_MARGIN_MS } = await import("../../src/source/saved.js")
+    const bare = { ok: true, status: 200, truncated: false, attempts: 1, trust: { specterContent: "untrusted" } } as const
+    expect(observation(bare, NOW)).toBe(new Date(NOW - CLOCK_MARGIN_MS).toISOString())
+    expect(observation({ ...bare, serverTime: "Sun, 08 Nov 2026 11:59:00 GMT" }, NOW)).toBe("2026-11-08T11:59:00.000Z")
+    expect(first.asOf).toBe(FIXTURE.now)
+  })
+
   it("keeps a page inside its bounds: the limit, and at most MAX_PAGE companies", async () => {
     const read = provider()
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE, limit: 500 }, read)
     expect(page.events.length).toBeLessThanOrEqual(MAX_PAGE)
     expect(Number((read.calls[0]!.query ?? {})["limit"])).toBe(MAX_PAGE)
-    expect(BOUNDARY_IDS).toBe(MAX_PAGE)
+    expect(MAX_CARRIED).toBe(MAX_PAGE + 5)
   })
 })
 
@@ -231,14 +246,14 @@ describe("specter.saved: the saved-search list", () => {
   it("reads the free list as saved searches, and keeps only what the plugin shows", () => {
     const searches = searchesOf(FIXTURE.searches)
     expect(searches.map((search) => [search.id, search.product_type])).toEqual([
-      [5432, "companies"],
+      [5432, "company"],
       [5433, "people"],
     ])
     expect(searches[0]).toMatchObject({ name: "Europe series A", query_id: "q_company_1", new_count: 4, owner_id: "owner_1", is_global: false })
   })
 
   it("refuses a list that is not the array its reference documents", () => {
-    expect(() => searchesOf({ unexpected: true })).toThrow(/^SCHEMA_VIOLATION: /)
+    expect(() => searchesOf({ unexpected: true })).toThrow(/^UNAVAILABLE: /)
   })
 })
 

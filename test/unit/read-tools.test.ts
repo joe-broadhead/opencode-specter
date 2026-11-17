@@ -69,6 +69,31 @@ describe("the plugin's own Specter tools", () => {
     expect(resolvedOf([{ query: { domain: "many.example" }, matches }], ["many.example"])[0]!.matches).toHaveLength(5)
   })
 
+  it("matches resolve groups by position, not by the normalized query they echo", () => {
+    // Specter echoes the identifier it normalized, so a `www.` prefix would never match by its echo.
+    const groups = [
+      { query: { domain: "example.com" }, matches: [{ id: "first" }] },
+      { query: { domain: "second.example" }, matches: [{ id: "second" }] },
+    ]
+    expect(resolvedOf(groups, ["www.Example.com", "second.example"]).map((group) => group.matches[0]?.id)).toEqual(["first", "second"])
+  })
+
+  it("refuses a resolve body that is not the array its reference documents, rather than answering every domain empty", () => {
+    expect(() => resolvedOf({ matches: [] }, ["example.com"])).toThrow(/^UPSTREAM_ERROR: /)
+    expect(() => resolvedOf([{ matches: [] }], ["example.com", "second.example"])).toThrow(/^UPSTREAM_ERROR: /)
+  })
+
+  it("offers only company searches at bind, and labels them with the product the reference spells", async () => {
+    const { fetch } = fakeFetch([
+      { id: 5432, name: "Europe series A", product_type: "company", new_count: 1, full_count: 2 },
+      { id: 5433, name: "Talent moves", product_type: "people", new_count: 0, full_count: 3 },
+      { id: 5434, name: "No product named", new_count: 0 },
+    ])
+    const { spec } = tools({ fetch })
+    const outcome = (await spec("list_saved_searches").run({}, CALL)).output as { options: { id: string }[] }
+    expect(outcome.options.map((option) => option.id)).toEqual(["5432", "5434"])
+  })
+
   it("get_company reads one profile by id, and says what it costs", async () => {
     const { fetch, seen } = fakeFetch({
       id: "hedgehog",
@@ -88,6 +113,14 @@ describe("the plugin's own Specter tools", () => {
       cost: { credits: 1 },
     })
     expect(asserts).toEqual([{ action: "specter_get_company", resources: ["*"] }])
+  })
+
+  it("reads the industry and founding year in the shapes Specter's reference allows", async () => {
+    const { fetch } = fakeFetch({ id: "hedgehog", organization_name: "Hedgehog Analytics", industry: ["Data & Analytics", "Software"], founded_year: "2019" })
+    const { spec } = tools({ fetch })
+    const outcome = (await spec("get_company").run({ id: "hedgehog" }, CALL)).output as { company: { industry?: string; foundedYear?: number } }
+    expect(outcome.company.industry).toBe("Data & Analytics, Software")
+    expect(outcome.company.foundedYear).toBe(2019)
   })
 
   it("refuses a company id that is not Specter's shape, before any request", async () => {
@@ -117,10 +150,26 @@ describe("the plugin's own Specter tools", () => {
     const url = new URL(seen[0]!.url)
     expect(`${seen[0]!.method} ${url.origin}${url.pathname}`).toBe(`GET ${REST_BASE}/searches/companies/5432/results`)
     expect(Object.fromEntries(url.searchParams)).toEqual({ limit: "2", page: "1", new_results_after: "2026-11-08T00:00:00.000Z" })
-    expect(outcome.output).toMatchObject({ searchId: "5432", page: 1, limit: 2, cost: { credits: 2 } })
+    expect(outcome.output).toMatchObject({ searchId: "5432", page: 1, limit: 2, truncated: false, cost: { credits: 2 } })
     expect((outcome.output as { companies: { id: string }[] }).companies.map((company) => company.id)).toEqual(["hedgehog", "otter"])
     expect(asserts).toEqual([{ action: "specter_saved_search_results", resources: ["*"] }])
     expect(RESULTS_MAX).toBeGreaterThanOrEqual(100)
+  })
+
+  it("reports the credits Specter charged before the inline cap, and says when the page was cut", async () => {
+    // Twenty records of 8 KB: over the tool's 100 KB inline cap, so the answer is cut and shorter than what was charged.
+    const body = Array.from({ length: 20 }, (_, n) => ({ id: `big${n}`, organization_name: `Big ${n}`, technologies: Array.from({ length: 400 }, (_, k) => `Technology ${k}`) }))
+    const { fetch } = fakeFetch(body)
+    const { spec } = tools({ fetch })
+    const outcome = (await spec("saved_search_results").run({ searchId: "5432", limit: 20 }, CALL)).output as {
+      companies: unknown[]
+      truncated: boolean
+      cost: { credits: number; note: string }
+    }
+    expect(outcome.truncated).toBe(true)
+    expect(outcome.companies.length).toBeLessThan(20)
+    expect(outcome.cost.credits).toBe(20)
+    expect(outcome.cost.note).toMatch(/Specter returned 20 and charged for them/)
   })
 
   it("refuses a page bigger than the bound and a limit that is not a whole number", async () => {

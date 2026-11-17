@@ -103,16 +103,26 @@ again. It reads with the team key and costs one credit per company Specter retur
 - **When it happened.** Specter's records carry no "added to the search" time, so an event's `occurred_at` is when the
   read that first listed the company was answered, taken from Specter's own `Date` header. It is not the company's
   `last_updated`, which says nothing about when the search matched it.
-- **Cursors.** A cursor holds a watermark (`new_results_after`), the page within that window, and the ids of the page
-  just listed. Paging is by offset over a set that grows, so the watermark is fixed until a page comes back short: a
-  burst of companies added at one instant drains page by page and never jams.
-- **The boundary.** Specter's cutoff is inclusive ("on or after"), so a company added at exactly the new watermark would
-  be listed twice; the ids the cursor carries are dropped instead. Those repeats were still returned, so they are still
-  charged, and the page's `cost` says so.
+- **Cursors.** A cursor holds the window's watermark (`new_results_after`), the page within that window, and a 16-hex
+  hash of each company id the last read saw. Its worst case is 922 characters, inside the contract's 1,024, and that
+  budget is checked before a single credit is spent. Paging is by offset over a set that can change, so the watermark
+  is fixed until the window ends: a burst of companies added at one instant drains page by page and never jams.
+- **Late arrivals, shifts and repeats.** Offset paging over a changing set has no stable order, so the plugin does not
+  pretend otherwise: after the first page it re-reads the previous page's last five companies (and drops them by hash),
+  and the next window starts two minutes *before* this window's first answer, not at its last one. That is what finds a
+  company added while the reader paged, one whose match changed, or one that became visible late. Both re-reads are
+  charged, and companies they repeat are listed once because the cursor drops them by id — a company older than the
+  cursor's 30 carried hashes can repeat, with the same `external_id`. Specter's inclusive cutoff ("on or after") is
+  covered the same way. The two minutes are an assumption until a live check measures the lag between an addition and
+  its visibility.
 - **60 days, then a gap.** Specter tracks additions for 60 days. A cursor older than that answers `gap` with reason
-  `expired`, once, and the plugin's cursor restarts after it. The restart line is the stale watermark plus those 60
-  days, so it comes from the cursor and not from "now": reading the same expired cursor again answers the same gap,
-  and nothing added after the gap is skipped.
+  `expired` once, with `more: true` so the consumer reads on at once, and its cursor restarts at the earliest line
+  Specter can still serve — the window's edge, not "now" — so the sixty days Specter still holds are listed rather than
+  skipped. When Specter itself answers 422 for a cutoff, the same line is used unless the cursor is already at the edge,
+  where it restarts at "now" because nothing earlier is known to be readable.
+- **A cut answer is a failure.** A body cut at the read's inline limit, or a company record the plugin does not
+  recognise, fails the whole page with `UNAVAILABLE` and holds the cursor: no company is dropped silently, and the
+  credits reported are always what Specter returned.
 
 The contract's own documentation is in the [source contract](https://github.com/we-the-rebel-alliance/source-contract).
 
@@ -215,8 +225,11 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 - **The key is one team's.** Specter issues one API key per team; rotating it is the team admin's job, through
   `api-support@tryspecter.com` (see [SECURITY.md](SECURITY.md)).
 - **The source's read is a read.** It changes nothing, so the `access` option does not gate it, even though Specter
-  charges one credit per company: a consumer's own consent and budget decide whether it runs. The direct
-  `specter_saved_search_results` and `specter_get_company` calls are `spend`, and `access` gates those as changes.
+  charges one credit per company: a consumer's own consent and budget decide whether it runs, and the `specter` skill
+  says never to call it to answer a question. The direct `specter_saved_search_results` and `specter_get_company` calls
+  are `spend`, and `access` gates those as changes.
+- **Repeats and their credits.** The lookback and the page overlap re-read companies Specter still returns, so a poll
+  can cost a few more credits than the companies it lists. `cost` always reports what Specter returned.
 - **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
   it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
   per-member keys; the plugin has not been tried with one.

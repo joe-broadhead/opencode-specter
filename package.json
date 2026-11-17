@@ -248,8 +248,7 @@
           "events": "specter_events_list",
           "operations": [
             "searches.companies.results"
-          ],
-          "identity": []
+          ]
         },
         "private": true,
         "cost": {

@@ -47,6 +47,9 @@ export const READ_TOOL_CLASSES: Readonly<Record<string, ToolClass>> = {
   saved_search_results: "spend",
 }
 
+/** The product types that are a company search: Specter's reference spells it `company`, and `companies` is accepted. */
+export const COMPANY_PRODUCTS: ReadonlySet<string> = new Set(["company", "companies"])
+
 /** The provider operation `list_saved_searches` asserts: it is `specter.saved`'s bind-time `scope.suggest`. */
 export { SUGGEST_OPERATION }
 
@@ -100,18 +103,21 @@ const SearchCompaniesOutput = z.object({
 })
 
 /**
- * What one resolve answer holds: one result group per identifier sent, each with its matches. The groups are keyed by
- * the query they answer, so a caller's order is kept, and a group the answer leaves out is answered empty.
+ * What one resolve answer holds: one result group per identifier sent, **in the order they were sent**, which is what
+ * Specter's reference documents. A group is matched by its position, not by the `query` it echoes, because that echo is
+ * the *normalized* identifier (a `www.` prefix or a case difference would never match) — and a body that is not an
+ * array is refused rather than answered as "nothing found".
  */
 export function resolvedOf(data: unknown, domains: readonly string[]): { domain: string; matches: z.output<typeof ResolveMatch>[] }[] {
-  const groups = Array.isArray(data) ? data : []
-  return domains.map((domain) => {
-    const group = groups.find((item) => {
-      const query = typeof item === "object" && item !== null ? (item as Record<string, unknown>)["query"] : undefined
-      const named = typeof query === "object" && query !== null ? (query as Record<string, unknown>)["domain"] : undefined
-      return typeof named === "string" && named.toLowerCase() === domain.toLowerCase()
-    }) as Record<string, unknown> | undefined
-    const matches = Array.isArray(group?.["matches"]) ? (group["matches"] as unknown[]) : []
+  if (!Array.isArray(data)) {
+    throw new SpecterPluginError("UPSTREAM_ERROR", "Specter's Find-company-ID answer is not the array of result groups its reference documents.", "Try again; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+  }
+  if (data.length !== domains.length) {
+    throw new SpecterPluginError("UPSTREAM_ERROR", `Specter answered ${data.length} result group${data.length === 1 ? "" : "s"} for ${domains.length} domain${domains.length === 1 ? "" : "s"}.`, "Try again with fewer domains; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+  }
+  return domains.map((domain, index) => {
+    const group = (typeof data[index] === "object" && data[index] !== null ? data[index] : {}) as Record<string, unknown>
+    const matches = Array.isArray(group["matches"]) ? (group["matches"] as unknown[]) : []
     return {
       domain,
       matches: matches
@@ -245,6 +251,8 @@ const listSavedSearches: Omit<ToolSpec<typeof ListSearchesInput, typeof ListSear
 
 /** The most results one call returns: Specter takes up to 5000, and a page that size is not an answer. */
 export const RESULTS_MAX = 100
+/** The inline cap a tool's answer keeps: the request layer's default, so a page that big is reported as cut. */
+const MAX_TOOL_INLINE_BYTES = 100_000
 
 const ResultsInput = z.strictObject({
   searchId: z.string().min(1).max(20).regex(/^[0-9]+$/, "use the numeric id the saved-search list gives").describe("The saved company search's id."),
@@ -263,7 +271,9 @@ const ResultsOutput = z.object({
   page: z.number().int(),
   limit: z.number().int(),
   companies: z.array(CompanyView),
-  cost: z.object({ credits: z.number() }),
+  /** True when Specter's answer was cut at the inline cap: the page is shorter than what was charged for. */
+  truncated: z.boolean(),
+  cost: z.object({ credits: z.number(), note: z.string() }),
 })
 
 const savedSearchResults: Omit<ToolSpec<typeof ResultsInput, typeof ResultsOutput>, "name" | "action" | "class" | "run"> = {
@@ -320,9 +330,12 @@ export function ownSpecs(deps: ToolDeps): readonly ToolSpec[] {
       await deps.assert(call, "specter_list_saved_searches")
       await deps.assert(call, "specter.read", [`${ACCOUNT}:${SUGGEST_OPERATION}`])
       const answer = await send(deps, call, { method: "GET", path: "/searches", class: "read" })
-      // The contract caps a suggest at 64 options, each once: this tool is `specter.saved`'s scope.suggest.
+      // Only company searches are offered: this tool is `specter.saved`'s scope.suggest, and that source reads
+      // companies. Specter's reference spells the product `company`; `companies` is accepted too, because the answers
+      // are not live-verified. The contract caps a suggest at 64 options, each once.
       const seen = new Set<string>()
       const options = searchesOf(answer.data)
+        .filter((search) => search.product_type === undefined || COMPANY_PRODUCTS.has(search.product_type))
         .map(savedSearchOption)
         .filter((option) => (seen.has(option.id) ? false : (seen.add(option.id), true)))
         .slice(0, 64)
@@ -346,9 +359,19 @@ export function ownSpecs(deps: ToolDeps): readonly ToolSpec[] {
         query: { limit, page, ...(wanted.newResultsAfter === undefined ? {} : { new_results_after: wanted.newResultsAfter }) },
         class: "spend",
       })
-      const records = companiesOf(answer.data)
+      let records: CompanyRecord[]
+      try {
+        records = companiesOf(answer.data)
+      } catch (error) {
+        throw new SpecterPluginError("UPSTREAM_ERROR", error instanceof Error ? error.message.replace(/^UNAVAILABLE: /, "") : "Specter's answer is not the array of companies its reference documents.", "Try again; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+      }
       const companies = records.map(companyView)
-      return { output: { searchId: wanted.searchId, page, limit, companies, cost: { credits: records.length } }, metadata: { credits: records.length } }
+      // Specter charged for every result it returned, counted before the inline cap; a cut page says so.
+      const credits = answer.itemsReturned ?? records.length
+      const note = answer.truncated
+        ? `Specter returned ${credits} and charged for them; this answer was cut at ${MAX_TOOL_INLINE_BYTES.toLocaleString("en-GB")} bytes, so only ${records.length} are shown. Lower limit to see the rest.`
+        : "Specter charges one credit per result returned; it publishes no price per credit."
+      return { output: { searchId: wanted.searchId, page, limit, companies, truncated: answer.truncated, cost: { credits, note } }, metadata: { credits, ...(answer.truncated ? { truncated: true } : {}) } }
     },
   }
 

@@ -11,38 +11,49 @@
  *   get-company-saved-search-results.md). `new_results_after` returns "only the companies added to the search since
  *   then — pass back the timestamp of your last read to poll for what is new"; it "must be within the last 60 days",
  *   and an older one answers 422 `NEW_RESULTS_AFTER_BEYOND_RETENTION`.
+ * - Paging is `page`/`limit`, so a position is `offset = page × limit`: any offset is reachable by choosing both.
  * - The call costs **1 credit per result returned**; a 4xx or 5xx is not charged
  *   (https://api.tryspecter.com/api-ref/rate_limits.md, https://api.tryspecter.com/api-ref/errors.md).
  * - A `searchId` that is not a number answers 422; an unknown or unshared search answers 404; a search of another
  *   product answers 400 `NOT_SUPPORTED_PRODUCT`.
  * - Result records carry **no "added to the search at" time** (the `CompanyV1Response` schema lists `last_updated` and
  *   no addition field), and the order of results under `new_results_after` is undocumented. So an event's
- *   `occurred_at` is the **read's observation time** — the moment the page that first listed the company was answered
- *   — never the company's own `last_updated`, which is not when it became visible. `docs/costs.md` and the skill say
- *   so too.
+ *   `occurred_at` is the **read's observation time** — the moment the page that listed the company was answered —
+ *   never the company's own `last_updated`, which is not when it became visible. `docs/costs.md` and the skill say so.
  * - `GET /searches` lists every saved search shared with the API (id, name, product_type, query_id, new_count,
  *   full_count, owner_id, is_global) and is free; it is this source's `scope.suggest` and the plugin's own
  *   `list_saved_searches` tool.
  *
- * The cursor is this source's own, bound to the plugin, the source, the account and the search (`cursor`):
+ * **The cursor** is this source's own, bound to the plugin, the source, the account and the search (`cursor`). Its
+ * state is four small fields, and its worst case (a full page, six-figure page number, 20-digit search id) is 922
+ * characters, inside source-contract's 1,024 (a test pins both numbers):
  *
  * - `w` is the **watermark**: the `new_results_after` cutoff of the window being read. It is a *server* time when the
  *   answer carries a `Date` header (HTTP requires one, and Specter's server clock is the one that stamps additions),
- *   else the plugin's clock at the read. A cursor never moves it backwards, and a gap never recomputes it from "now":
- *   the page that answers a gap carries the restart line it chose, so a consumer that retries gets the same window.
- * - `p` is the **page** within that window. Specter pages by offset over a set that grows while you page, so the
- *   watermark is fixed for the whole window and only the page advances: a burst of companies added at one instant
- *   larger than a page drains page by page and never jams. When a page comes back short the window is done, the
- *   watermark moves to that page's observation time, and `p` returns to 0.
- * - `b` is the **boundary**: up to `BOUNDARY_IDS` company ids from the page just listed, dropped if the next read
- *   meets them again. Specter's cutoff is inclusive ("on or after"), so a company added at exactly the new watermark
- *   would be listed twice; carrying the ids also covers a page that had to be cut for size, which is resumed with the
- *   same page and the ids already listed. The cap is honest: a page holds at most `MAX_PAGE` companies, which is
- *   `BOUNDARY_IDS`, so every id of a page is carried.
- * - `g` records the lost window when a gap was answered (`gap.reason: "expired"`, `since` = the watermark that aged
- *   out). It is informational: the restart line is `w`, and no later page of the window repeats the gap. The restart
- *   line is the stale watermark plus Specter's window, not "now", so a retried gap read cannot slide it forward; only
- *   a cursor older than twice the window restarts at the window's edge, because nothing earlier can be read at all.
+ *   else the plugin's clock **minus a margin**, so a local clock ahead of Specter's cannot skip anything.
+ * - `f` is the window's **first observation**, the `Date` of its first page, kept until the window ends.
+ * - `p` is the **page** within the window. The watermark is fixed for the whole window and only the page advances, so
+ *   a burst of companies added at one instant drains page by page and never jams.
+ * - `k` holds a **16-hex hash of each company id** the last read listed (never the ids themselves, so the cursor stays
+ *   small whatever their length), and a company whose hash is already there is dropped instead of repeated.
+ *
+ * **The window's next watermark is `f − LOOKBACK`**, not the last page's time. Offset paging over a set that can
+ * change has no stable order: a company added while the reader pages can land at an offset already read, a company
+ * that stops matching shifts the rest back one, and an addition can become visible after an answer that already
+ * carried a later `Date`. The lookback re-reads the last couple of minutes of additions, so those arrive in the next
+ * window; what it cannot catch within one window is caught by the **page overlap**: after the first page, the last
+ * `OVERLAP` companies of the previous page are read again (offset `p × MAX_PAGE − OVERLAP`, expressible as
+ * `page = 5p − 1, limit = OVERLAP`) and dropped by hash. Both cost credits — the overlap re-reads `OVERLAP` companies
+ * and the lookback re-reads what it covers — and `docs/costs.md` says so. `LOOKBACK` is an assumption (two minutes)
+ * until live check 2 measures the lag between an addition and its visibility.
+ *
+ * A company the plugin does not recognise, and a body cut at the inline cap, **fail the whole page** (`UNAVAILABLE`,
+ * the cursor held): a page that silently dropped an item or ended early would lose history and under-report credits.
+ *
+ * **A gap** (a watermark older than Specter's 60 days) is answered once, with `more: true`: the cursor's watermark is
+ * the earliest line still readable, `max(w, now − 60d + grace)`, so everything Specter still holds is listed rather
+ * than skipped; on Specter's own 422 the line is `now`, because nothing earlier is known to be readable. The lost
+ * window's start is reported once, in `gap.since`, and never repeated.
  */
 import { type CursorBinding, decodeBoundCursor, encodeBoundCursor } from "@we-the-rebel-alliance/source-contract/cursor"
 import {
@@ -61,6 +72,7 @@ import {
   screenEvents,
   startTime,
 } from "@we-the-rebel-alliance/source-contract/events"
+import { createHash } from "node:crypto"
 import type { ApiOutput, RestInput } from "../api/request.js"
 
 /** The plugin's package name: every page names it. */
@@ -75,15 +87,26 @@ export const SCOPE_KEY = "search"
 export const ACCOUNT = "default"
 /** The most bytes of JSON one page holds: the descriptor's `maxBytes`, the host's RPC cap. */
 export const MAX_BYTES = 65_536
-/** The most companies one page carries: a bound on the answer, and on the ids the cursor carries. */
+/** The most companies one page lists, and the vendor limit of the page it reads. */
 export const MAX_PAGE = 25
+/** The companies of the previous page read again to absorb a shift mid-window, and dropped by hash. */
+export const OVERLAP = 5
+/** The lookback the next window starts before this window's first observation: an assumption until live check 2. */
+export const LOOKBACK_MS = 2 * 60_000
+/** How many hex characters of a company id's SHA-256 the cursor carries, and the most it carries. */
+export const HASH_CHARS = 16
+export const MAX_CARRIED = MAX_PAGE + OVERLAP
 /** Specter tracks additions to a saved search for 60 days; an older cutoff answers 422 rather than a partial answer. */
 export const RETENTION_DAYS = 60
 const RETENTION_MS = RETENTION_DAYS * 86_400_000
 /** How far inside Specter's window a restart line sits, so clock skew between the two never asks for the very edge. */
 const RESTART_GRACE_MS = 3_600_000
-/** Company ids carried across the page boundary; `MAX_PAGE`, so a whole page fits. */
-export const BOUNDARY_IDS = 25
+/** The local clock is pulled back this far when an answer carries no `Date`, so it can only be behind Specter's. */
+export const CLOCK_MARGIN_MS = 5_000
+/** The most bytes this source reads into memory: a page of records, which it keeps only ids and names from. */
+export const SOURCE_INLINE_BYTES = 8 * 1024 * 1024
+/** What one record is budgeted to cost, so `MAX_PAGE` records stay inside SOURCE_INLINE_BYTES with room to spare. */
+export const RECORD_BUDGET_BYTES = 256 * 1024
 /** The event kind: a company Specter added to a saved search. No core kind fits. */
 export const EVENT_KIND = "x-specter/company"
 /** The prefix of every `external_id`, so an id says what it is. */
@@ -129,8 +152,21 @@ export interface SavedSearch {
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value)
 const text = (value: unknown, max: number): string | undefined => (typeof value === "string" && value.trim() !== "" ? value.trim().slice(0, max) : undefined)
 const whole = (value: unknown): number | undefined => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined)
+/** `founded_year` is an integer or, the reference says, a string: both are read. */
+const year = (value: unknown): number | undefined => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.floor(value)
+  if (typeof value === "string" && /^\d{4}$/.test(value.trim())) return Number(value.trim())
+  return undefined
+}
+/** `industry` is an array, a string or null, the reference says: kept as one line. */
+const industries = (value: unknown): string | undefined => {
+  if (typeof value === "string") return text(value, 120)
+  if (!Array.isArray(value)) return undefined
+  const names = value.flatMap((item) => (typeof item === "string" && item.trim() !== "" ? [item.trim()] : []))
+  return names.length === 0 ? undefined : names.join(", ").slice(0, 120)
+}
 
-/** A company's id, as Specter writes it: letters, digits, `_` and `-`. A path segment never carries anything else. */
+/** A company's id, as Specter writes it (24 hex in its reference): letters, digits, `_` and `-`. */
 export const COMPANY_ID = /^[A-Za-z0-9_-]{4,64}$/
 /** A saved search's id: Specter's `searchId` is an integer, and anything else is 422 there. */
 export const SEARCH_ID = /^[0-9]{1,20}$/
@@ -154,8 +190,8 @@ export function companyOf(value: unknown): CompanyRecord | undefined {
     ...(hq ? { hq } : {}),
     employee_count: whole(value["employee_count"]),
     employee_count_range: text(value["employee_count_range"], 40),
-    founded_year: whole(value["founded_year"]),
-    industry: text(value["industry"], 120),
+    founded_year: year(value["founded_year"]),
+    ...(industries(value["industry"]) === undefined ? {} : { industry: industries(value["industry"]) }),
     growth_stage: text(value["growth_stage"], 80),
     description: text(value["description"], 1000),
     ...(funding ? { funding } : {}),
@@ -163,14 +199,20 @@ export function companyOf(value: unknown): CompanyRecord | undefined {
   }
 }
 
-/** The companies in one results answer; a body that is not an array of records is SCHEMA_VIOLATION. */
+/**
+ * The companies in one results answer. A body that is not an array, or an item the plugin does not recognise, fails
+ * the whole page as `UNAVAILABLE`: a page that dropped an item would lose history and still be charged for it.
+ */
 export function companiesOf(data: unknown): CompanyRecord[] {
   if (!Array.isArray(data)) {
-    refuse("SCHEMA_VIOLATION", "Specter's saved-search results answer is not the array of companies its reference documents", "Try again; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+    refuse("UNAVAILABLE", "Specter's saved-search results answer is not the array of companies its reference documents", "Try again with the same cursor; if it keeps happening, Specter's API has changed and the plugin needs an update.")
   }
-  return data.flatMap((item) => {
+  return data.map((item) => {
     const company = companyOf(item)
-    return company === undefined ? [] : [company]
+    if (company === undefined) {
+      refuse("UNAVAILABLE", "Specter's saved-search results held a company record this plugin does not recognise, so the page cannot be listed without losing it", "Try again with the same cursor; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+    }
+    return company
   })
 }
 
@@ -178,7 +220,7 @@ export function companiesOf(data: unknown): CompanyRecord[] {
 export function searchesOf(data: unknown): SavedSearch[] {
   const list = Array.isArray(data) ? data : record(data) && Array.isArray(data["items"]) ? data["items"] : undefined
   if (list === undefined) {
-    refuse("SCHEMA_VIOLATION", "Specter's saved-search list is not the array its reference documents", "Try again; if it keeps happening, Specter's API has changed and the plugin needs an update.")
+    refuse("UNAVAILABLE", "Specter's saved-search list is not the array its reference documents", "Try again; if it keeps happening, Specter's API has changed and the plugin needs an update.")
   }
   return list.flatMap((item): SavedSearch[] => {
     if (!record(item)) return []
@@ -201,7 +243,7 @@ export function searchesOf(data: unknown): SavedSearch[] {
 }
 
 /** A failed answer as this source's refusal: Specter's status, its `errorCode` and the wait it named. */
-export function failureOf(answer: ApiOutput): SourceError {
+export function failureOf(answer: ApiOutput, watermark?: string): SourceError {
   const code = answer.error?.errorCode
   const said = code === undefined ? "" : ` (${code})`
   const wait = answer.credits?.resetSeconds ?? answer.rateLimit?.resetSeconds
@@ -211,19 +253,31 @@ export function failureOf(answer: ApiOutput): SourceError {
   }
   if (answer.status === 403) {
     return code === "NOT_PERMITTED"
-      ? new SourceError({ code: "UNAVAILABLE", what: `Specter answered HTTP 403${said}: the key is valid, but the team's plan does not include saved-search results`, next: "Ask Specter's support about API access to saved searches." })
+      ? new SourceError({ code: "UNAVAILABLE", what: `Specter answered HTTP 403${said}: the key is valid, but the team's plan does not include this endpoint`, next: "Ask Specter's support about API access to it." })
       : new SourceError({ code: "NEEDS_SIGN_IN", what: `Specter refused the team API key with HTTP 403${said}`, next: "Run /connect, choose Specter and paste a current team API key, then call events_list again." })
   }
   if (answer.status === 402) {
+    // The contract's BUDGET_EXCEEDED is a person's own budget, not the provider's: Specter's credit pool is the
+    // provider's limit, so it is RATE_LIMITED, with the wait Specter named.
     return new SourceError({
-      code: "BUDGET_EXCEEDED",
+      code: "RATE_LIMITED",
       what: code === "DAILY_CREDIT_CAP_REACHED" ? "Specter stopped the read: the organisation's daily credit limit is reached" : `Specter stopped the read: the team's credit budget for this period is spent${said}`,
-      next: "Read the saved search again once the credits renew, or ask Specter's support for more credits.",
+      next: "Wait for the credits to renew, then call events_list again with the same cursor; an admin can ask Specter's support for more.",
       ...retry,
     })
   }
   if (answer.status === 404) {
     return new SourceError({ code: "INPUT_INVALID", what: "Specter knows no saved search with the scope's id, or it is not shared with the API", next: "Pass scope.search, the id of a saved company search shared to the API; the free saved-search list shows them." })
+  }
+  if (answer.status === 422 && code === "NEW_RESULTS_AFTER_BEYOND_RETENTION") {
+    // Specter itself says the cutoff is older than its 60-day window: history is lost, so this is the contract's
+    // CURSOR_EXPIRED, with the window that aged out.
+    return new SourceError({
+      code: "CURSOR_EXPIRED",
+      what: `Specter answered HTTP 422${said}: it tracks additions to a saved search for ${RETENTION_DAYS} days, and the cursor's watermark is older`,
+      next: "The source answers a gap and restarts from the earliest line Specter can still serve; call events_list again with the cursor it answered.",
+      ...(watermark === undefined ? {} : { gap: { reason: "expired" as const, since: watermark } }),
+    })
   }
   if (answer.status === 400 || answer.status === 422) {
     return new SourceError({
@@ -243,27 +297,51 @@ export function failureOf(answer: ApiOutput): SourceError {
   })
 }
 
-/** The watermark an answer names: its `Date` header (a server time), or the plugin's clock when it sent none. */
+/**
+ * The watermark an answer names: its `Date` header (a server time), or the plugin's clock pulled back by
+ * `CLOCK_MARGIN_MS`, so a local clock ahead of Specter's can only make the next read ask for more, never less.
+ */
 export function observation(answer: ApiOutput, now: number): string {
   const at = answer.serverTime === undefined ? Number.NaN : Date.parse(answer.serverTime)
-  return new Date(Number.isFinite(at) ? at : now).toISOString()
+  return new Date(Number.isFinite(at) ? at : now - CLOCK_MARGIN_MS).toISOString()
 }
 
 /** What a cursor holds. */
 interface Position {
-  /** The `new_results_after` cutoff of the window. */
+  /** The window's `new_results_after` cutoff. */
   readonly w: string
+  /** The window's first observation, until the window ends. */
+  readonly f?: string
   /** The page within the window. */
   readonly p: number
-  /** Company ids already listed, dropped if they meet the read again (`i`, because `b` is the cursor's binding). */
-  readonly i: readonly string[]
-  /** The lost window a gap answered, kept as a record, never recomputed. */
-  readonly g?: string
+  /** A 16-hex hash per company id already listed, so none is repeated. */
+  readonly k: readonly string[]
 }
 
 const bindingOf = (search: string): CursorBinding => ({ plugin: "specter", source: SOURCE, account: ACCOUNT, scope: { [SCOPE_KEY]: search } })
 
 const isoTime = (value: unknown): value is string => typeof value === "string" && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value))
+const HASH = new RegExp(`^[0-9a-f]{${HASH_CHARS}}$`)
+
+/** A company id's hash, as the cursor carries it: 16 hex characters of its SHA-256, never the id. */
+export function hashOf(id: string): string {
+  return createHash("sha256").update(id).digest("hex").slice(0, HASH_CHARS)
+}
+
+/**
+ * The longest this source's cursor can be: a full page's hashes, a six-figure page and the longest ids. The state
+ * fields are fixed-width, so this is the true worst case; `encodeBoundCursor` refuses anything over 1,024.
+ */
+export function maxCursorLength(search: string): number {
+  const state = { w: "2026-11-30T23:59:59.999Z", f: "2026-11-30T23:59:59.999Z", p: 999_999, k: Array.from({ length: MAX_CARRIED }, () => "0123456789abcdef") }
+  return encodeBoundCursor(bindingOf(search), state).length
+}
+
+/** The cursor budget, checked before any read: a page must never be fetched if its cursor could not be issued. */
+function assertCursorFits(search: string): void {
+  if (maxCursorLength(search) <= 1024) return
+  refuse("UNAVAILABLE", "This source's cursor would be longer than the source contract allows, so the read was not made", "Report this: the plugin sizes its page against the cursor's limit, and this is a bug.")
+}
 
 function positionOf(cursor: string, search: string): Position {
   const decoded = decodeBoundCursor(bindingOf(search), cursor)
@@ -271,17 +349,17 @@ function positionOf(cursor: string, search: string): Position {
     refuse("CURSOR_INVALID", "The cursor is not this source's, this account's and this saved search's", "Start the read again with since, or with the previous result's cursor.")
   }
   const { state } = decoded
-  const [w, p, i, g] = [state["w"], state["p"], state["i"], state["g"]]
+  const [w, f, p, k] = [state["w"], state["f"], state["p"], state["k"]]
   if (!isoTime(w) || typeof p !== "number" || !Number.isSafeInteger(p) || p < 0 || p > 1_000_000) {
     refuse("CURSOR_INVALID", "The cursor does not hold this source's watermark and page", "Start the read again with since, or with the previous result's cursor.")
   }
-  if (!Array.isArray(i) || i.length > BOUNDARY_IDS || !i.every((id): id is string => typeof id === "string" && COMPANY_ID.test(id))) {
-    refuse("CURSOR_INVALID", "The cursor does not hold this source's boundary ids", "Start the read again with since, or with the previous result's cursor.")
+  if (f !== undefined && !isoTime(f)) {
+    refuse("CURSOR_INVALID", "The cursor's window start is not a time", "Start the read again with since, or with the previous result's cursor.")
   }
-  if (g !== undefined && !isoTime(g)) {
-    refuse("CURSOR_INVALID", "The cursor's gap record is not a time", "Start the read again with since, or with the previous result's cursor.")
+  if (!Array.isArray(k) || k.length > MAX_CARRIED || !k.every((hash): hash is string => typeof hash === "string" && HASH.test(hash))) {
+    refuse("CURSOR_INVALID", "The cursor does not hold this source's listed-company hashes", "Start the read again with since, or with the previous result's cursor.")
   }
-  return { w, p, i, ...(g === undefined ? {} : { g }) }
+  return { w, p, k, ...(f === undefined ? {} : { f }) }
 }
 
 /** The scope's saved-search id, canonical (`scope.search` is a string or a one-item list). */
@@ -313,6 +391,21 @@ export function toEvent(company: CompanyRecord, observedAt: string): SourceEvent
 /** What one results page cost: one credit per company Specter returned, which is what its reference states. */
 export const costOf = (results: number): EventsCost | undefined => (results > 0 ? { units: [{ per: "credit", count: results }] } : undefined)
 
+/**
+ * The vendor page size for a caller's `limit`: never more than the caller asked for, never more than MAX_PAGE, and a
+ * multiple of OVERLAP once it is at least OVERLAP, so the overlap's offset is always expressible as `page`/`limit`. A
+ * page read is therefore never cut by the caller's limit, and costs only what it returns.
+ */
+export function pageSizeFor(limit: number): number {
+  const bounded = Math.max(1, Math.min(limit, MAX_PAGE))
+  return bounded <= OVERLAP ? bounded : Math.floor(bounded / OVERLAP) * OVERLAP
+}
+
+/** The overlap read's page number for a main page of `pageSize`: the offset is `p × pageSize − OVERLAP`. */
+export function overlapPageFor(page: number, pageSize: number): number {
+  return (page * pageSize - OVERLAP) / OVERLAP
+}
+
 /** The code, what happened and the next step of the plugin's own request failure, when `error` is one. */
 export function pluginFailureOf(error: unknown): { readonly code: string; readonly what: string; readonly next: string } | undefined {
   if (!(error instanceof Error)) return undefined
@@ -328,9 +421,41 @@ export interface ListingOptions {
   readonly now: number
 }
 
+/** One vendor page: the companies it returned and how many it returned before the inline cap. */
+interface VendorPage {
+  readonly companies: CompanyRecord[]
+  readonly returned: number
+  readonly observedAt: string
+}
+
+/** One page of the results endpoint, read with this source's inline budget, failing closed on a cut or bad body. */
+async function vendorPage(read: Read, search: string, watermark: string, page: number, limit: number, now: number): Promise<VendorPage> {
+  let answer: ApiOutput
+  try {
+    answer = await read({
+      method: "GET",
+      path: `/searches/companies/${search}/results`,
+      query: { new_results_after: watermark, page, limit },
+      class: "spend",
+      maxInlineBytes: SOURCE_INLINE_BYTES,
+    })
+  } catch (error) {
+    const named = pluginFailureOf(error)
+    if (named === undefined) throw error
+    throw new SourceError({ code: "UNAVAILABLE", what: named.what, next: named.next })
+  }
+  if (!answer.ok) throw failureOf(answer, watermark)
+  // A body cut at the inline cap is not a short page: the rest of it was never read, so nothing here may be listed.
+  if (answer.truncated) {
+    refuse("UNAVAILABLE", `Specter's answer was cut at ${SOURCE_INLINE_BYTES} bytes, so this page is incomplete`, "Call events_list again with the same cursor; if it keeps happening, the plugin's page size needs lowering.")
+  }
+  return { companies: companiesOf(answer.data), returned: answer.itemsReturned ?? (Array.isArray(answer.data) ? answer.data.length : 0), observedAt: observation(answer, now) }
+}
+
 /**
  * One page of events for the saved search the scope names. Throws a SourceError for the caller's mistakes, Specter's
- * failures and an expired watermark; the input, the account and the cursor are checked before any read.
+ * failures and an expired watermark; the input, the account, the cursor and the cursor's own budget are checked before
+ * any read.
  */
 export async function listEvents(input: unknown, options: ListingOptions): Promise<EventsListResult> {
   const parsed = parseEventsListInput(input, { scopeKeys: [SCOPE_KEY] })
@@ -346,59 +471,84 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
   if (search === undefined) {
     refuse("INPUT_INVALID", `The read names no saved search: scope.${SCOPE_KEY} is required`, "Pass scope.search, the id of a saved company search shared to the API.")
   }
+  // The cursor's own budget, before any read: a page must never be fetched if its cursor could not be issued.
+  assertCursorFits(search)
   const held = await options.open()
   if (held === undefined) refuse("NEEDS_SIGN_IN", "No Specter team API key is connected, so the saved-search source cannot read", "Run /connect, choose Specter and paste the team API key from the API Console, then call events_list again.")
   const { read, owner } = held
   const nowIso = new Date(options.now).toISOString()
   const position: Position = request.cursor === undefined
-    ? { w: new Date(Math.min(startTime(request, options.now), options.now)).toISOString(), p: 0, i: [] }
+    ? { w: new Date(Math.min(startTime(request, options.now), options.now)).toISOString(), p: 0, k: [] }
     : positionOf(request.cursor, search)
-  const limit = Math.min(request.limit, MAX_PAGE)
 
   // The 60-day window is checked before the call: a 422 would cost nothing but a round trip, and the answer must be
-  // this source's own gap, never Specter's error.
-  if (Date.parse(position.w) < options.now - RETENTION_MS) return gapPage(search, position, owner, options.now, nowIso)
+  // this source's own gap, never Specter's error. The restart is the earliest line Specter can still serve.
+  const edge = options.now - RETENTION_MS + RESTART_GRACE_MS
+  if (Date.parse(position.w) < options.now - RETENTION_MS) {
+    return gapPage(search, position, owner, Math.max(Date.parse(position.w), edge), nowIso)
+  }
 
-  let answer: ApiOutput
+  // The page: the main read, and after the first page the previous page's tail again, so a shift cannot skip one.
+  // The vendor page is a multiple of OVERLAP, so the tail starts at an offset `page`/`limit` can express exactly.
+  const pageSize = pageSizeFor(request.limit)
+  let main: VendorPage
+  let overlap: VendorPage | undefined
   try {
-    answer = await read({
-      method: "GET",
-      path: `/searches/companies/${search}/results`,
-      query: { new_results_after: position.w, page: position.p, limit },
-      class: "spend",
-    })
+    main = await vendorPage(read, search, position.w, position.p, pageSize, options.now)
+    if (position.p > 0 && pageSize >= OVERLAP) overlap = await vendorPage(read, search, position.w, overlapPageFor(position.p, pageSize), OVERLAP, options.now)
   } catch (error) {
-    const named = pluginFailureOf(error)
-    if (named === undefined) throw error
-    throw new SourceError({ code: "UNAVAILABLE", what: named.what, next: named.next })
+    // Specter's own retention 422 is the one gap it decides. Its clock, not the plugin's, said the watermark was too
+    // old, so restart at the window's edge; only when the cursor is already at or past that edge (a clock more than
+    // the grace behind Specter's) is nothing earlier known to be readable, and the restart is now.
+    if (error instanceof SourceError && error.code === "CURSOR_EXPIRED") {
+      return gapPage(search, position, owner, Date.parse(position.w) < edge ? edge : options.now, nowIso)
+    }
+    throw error
   }
-  if (!answer.ok && answer.status === 422 && answer.error?.errorCode === "NEW_RESULTS_AFTER_BEYOND_RETENTION") {
-    return gapPage(search, position, owner, options.now, nowIso)
+  const observedAt = main.observedAt
+  const seen = new Set(position.k)
+  const listed: CompanyRecord[] = []
+  for (const company of [...(overlap?.companies ?? []), ...main.companies]) {
+    const hash = hashOf(company.id)
+    if (seen.has(hash)) continue
+    seen.add(hash)
+    listed.push(company)
   }
-  if (!answer.ok) throw failureOf(answer)
-
-  const companies = companiesOf(answer.data)
-  const observedAt = observation(answer, options.now)
-  const seen = new Set(position.i)
-  const fresh = companies.filter((company) => (seen.has(company.id) ? false : (seen.add(company.id), true)))
   // Everything on a page became visible in this read, so each event's occurred_at is this read's observation time.
-  const screened = screenEvents(fresh.map((company) => toEvent(company, observedAt)))
-  const fits = fitPage(screened.events, limit, MAX_BYTES)
+  const screened = screenEvents(listed.map((company) => toEvent(company, observedAt)))
+  const fits = fitPage(screened.events, request.limit, MAX_BYTES)
   const page = screened.events.slice(0, fits)
-  // The vendor page was full, or this page was cut for size: either way there is more to list, under the same
-  // watermark. The ids listed are carried so the next read does not repeat them.
-  const full = companies.length >= limit
+  const full = main.returned >= pageSize
   const cut = fits < screened.events.length
   const done = !full && !cut
-  const cursor = encodeBoundCursor(bindingOf(search), {
-    w: done ? observedAt : position.w,
-    // A page cut for size is read again with the ids it listed carried, so the next read lists the rest of it; only a
-    // full vendor page moves the offset.
-    p: done ? 0 : cut ? position.p : position.p + 1,
-    i: done ? companies.map((company) => company.id).slice(0, BOUNDARY_IDS) : page.map((event) => event.external_id.slice(EXTERNAL_PREFIX.length)),
-    ...(position.g === undefined ? {} : { g: position.g }),
-  })
-  const cost = costOf(companies.length)
+  // The window's next watermark looks back from its *first* observation, so a company added while the reader paged, or
+  // one that became visible late, is listed next time; the window advances by at least a millisecond regardless.
+  const first = position.f ?? observedAt
+  const next = new Date(Math.max(Date.parse(first) - LOOKBACK_MS, Date.parse(position.w) + 1)).toISOString()
+  // Every company this read saw is carried, the refused and already-listed ones included, so a company the lookback
+  // re-reads is dropped rather than listed twice; a page cut for size is read again at the same offset and carries
+  // only what it has reached so far, so the rest of it is still there next time.
+  const carried = [
+    ...new Set(
+      cut
+        ? [...position.k, ...page.map((event) => hashOf(event.external_id.slice(EXTERNAL_PREFIX.length)))]
+        : [...position.k, ...(overlap?.companies ?? []).map((company) => hashOf(company.id)), ...main.companies.map((company) => hashOf(company.id))],
+    ),
+  ].slice(-MAX_CARRIED)
+  const cost = costOf(main.returned + (overlap?.returned ?? 0))
+  let cursor: string
+  try {
+    cursor = encodeBoundCursor(bindingOf(search), {
+      w: done ? next : position.w,
+      ...(done ? {} : { f: first }),
+      p: done ? 0 : cut ? position.p : position.p + 1,
+      k: carried,
+    })
+  } catch (error) {
+    // The budget was checked before the read, so this is a bug, not a full page: refuse rather than throw a plain Error
+    // whose page the consumer could not resume from.
+    refuse("UNAVAILABLE", `This source's cursor could not be issued (${error instanceof Error ? error.message : "an unknown error"})`, "Report this: the plugin sizes its page against the cursor's limit, and this is a bug.")
+  }
   return eventsListResult(
     { source: SOURCE, account: ACCOUNT, owner },
     page,
@@ -415,19 +565,13 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
 }
 
 /**
- * The page that answers a gap: no events, `gap.reason: "expired"` and the lost window's start, and a cursor whose
- * watermark is the first moment Specter can still answer for. It is answered once: the cursor it answers carries a
- * fresh watermark, so the next read starts after the hole rather than going round it again.
- *
- * The restart line is the old watermark plus Specter's 60-day window, not "now": Specter still tracks everything added
- * in the last 60 days, so restarting there recovers all of it, and a consumer that retries the same expired cursor
- * gets the same line rather than one that has slid forward. Only a cursor older than twice the window has no line but
- * the edge of the window itself, which moves with the clock because nothing earlier can be read at all.
+ * The page that answers a gap: no events, `gap.reason: "expired"` and the lost window's start, and `more: true` so the
+ * consumer reads on at once from a line Specter can still serve — the earliest readable one, carried in the cursor.
+ * It is answered once: the cursor it answers carries a fresh watermark, and no later page repeats the gap.
  */
-function gapPage(search: string, position: Position, owner: EventsOwner, now: number, nowIso: string): EventsListResult {
-  const restartAt = Math.min(now, Math.max(Date.parse(position.w) + RETENTION_MS, now - RETENTION_MS + RESTART_GRACE_MS))
-  const restart = encodeBoundCursor(bindingOf(search), { w: new Date(restartAt).toISOString(), p: 0, i: [], ...(position.g === undefined ? { g: position.w } : { g: position.g }) })
-  return eventsListResult({ source: SOURCE, account: ACCOUNT, owner }, [], restart, false, {
+function gapPage(search: string, position: Position, owner: EventsOwner, restartAt: number, nowIso: string): EventsListResult {
+  const restart = encodeBoundCursor(bindingOf(search), { w: new Date(restartAt).toISOString(), p: 0, k: [] })
+  return eventsListResult({ source: SOURCE, account: ACCOUNT, owner }, [], restart, true, {
     scope: { [SCOPE_KEY]: search },
     gap: { reason: "expired", since: position.w },
     plugin: PACKAGE,
@@ -438,10 +582,9 @@ function gapPage(search: string, position: Position, owner: EventsOwner, now: nu
 /**
  * `probe` (the source contract's): the organisation whose team key is connected, named from the free credit balance
  * and nothing it reads. A team key names no person, and the balance answer names no organisation, so the owner is the
- * key itself, `specter:key:<fingerprint>`: a scheme-qualified id the provider does not confirm, which is why the
- * plugin holds `verified: false` back until consumers re-vendor the contract that accepts it.
+ * key itself, `specter:key:<fingerprint>`: a scheme-qualified id the provider does not confirm.
  */
-export async function probe(input: unknown, options: { readonly open: () => Promise<SourceAccess> }): Promise<ProbeResult> {
+export async function probe(input: unknown, options: { readonly open: () => Promise<SourceAccess | undefined> }): Promise<ProbeResult> {
   const parsed = parseProbeInput(input)
   if (!parsed.ok) refuse("INPUT_INVALID", `The probe input is invalid: ${parsed.problems.join("; ")}`, "Pass only source and account, as probe's schema describes.")
   if (parsed.value.source !== undefined && parsed.value.source !== SOURCE) {
@@ -451,7 +594,7 @@ export async function probe(input: unknown, options: { readonly open: () => Prom
     refuse("ACCOUNT_MISMATCH", `Specter's team key names one account, ${ACCOUNT}`, `Pass account "${ACCOUNT}", or leave it out.`)
   }
   const held = await options.open()
-  if (held === undefined) refuse("NEEDS_SIGN_IN", "No Specter team API key is connected, so the saved-search source cannot read", "Run /connect, choose Specter and paste the team API key from the API Console, then call events_list again.")
+  if (held === undefined) refuse("NEEDS_SIGN_IN", "No Specter team API key is connected, so the saved-search source cannot read", "Run /connect, choose Specter and paste the team API key from the API Console, then call probe again.")
   const { read, owner } = held
   let answer: ApiOutput
   try {
