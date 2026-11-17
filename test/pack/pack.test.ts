@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url"
 import { DISPLAY_NAME, KEY_INTEGRATION_ID, MCP_URL, PLUGIN_ID, SERVER_NAME, SUPPORTED_HOST, TESTED_HOSTS } from "../../src/constants.js"
 import { defaultRules, type Rule } from "../../src/permissions.js"
 import { SKILL_IDS } from "../../src/skills.js"
-import { METHODS, TOOLS_RPC_ID } from "../../src/tools-rpc.js"
+import { TOOLS_RPC_ID, methodNames } from "../../src/tools-rpc.js"
 
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
@@ -236,11 +236,11 @@ describe.each(TESTED_HOSTS)("installed alone, in stock OpenCode %s", (version) =
       expect(output).not.toHaveProperty("problems")
       expect(output).not.toHaveProperty("shadowedSkills")
 
-      // The tools RPC answers with no model: its id, and exactly the methods the plugin classifies (none until
-      // Specter's tools are captured and classified).
+      // The tools RPC answers with no model: its id, and exactly the methods the plugin offers (its own four REST tools
+      // and the source's two, until a live capture classifies Specter's MCP tools).
       const { output: described } = await host.api<{ output: { id: string; methods: { name: string }[] } }>("POST", `/api/rpc/${TOOLS_RPC_ID}/describe`, { input: {} })
       expect(described.id).toBe(TOOLS_RPC_ID)
-      expect(described.methods.map((method) => method.name)).toEqual(METHODS.map((method) => method.name))
+      expect(described.methods.map((method) => method.name).sort()).toEqual(methodNames())
 
       // The project's agents are exactly OpenCode's own and the one its config defines: nothing came from a folder
       // above the temp root.

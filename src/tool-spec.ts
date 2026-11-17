@@ -5,9 +5,8 @@
  * Mode receives `output`; a direct call shows `content`, compact JSON cut at the inline cap with a note to narrow the
  * query. A plugin error reaches the model as a tool error with metadata `{ code, next }`.
  *
- * No tool exists yet. TODO(Slice 7): add one spec per capability in SPEC.md §4, in that order, with its name, endpoint
- * and class taken from Specter's API reference when the slice starts, never invented ahead of it. TODO(Slice 8):
- * `events_list` and `probe` come from the source contract, not from a spec here.
+ * `read-tools.ts` holds the four REST tools and their tables; `source/` holds the source contract's `events_list` and
+ * `probe`, which are methods in the same namespace but are not specs here.
  */
 import { Error as ToolError } from "@opencode/plugin/promise/tool"
 import type { JsonSchema, MethodClass, PluginMethod } from "@we-the-rebel-alliance/source-contract/tools-rpc"
@@ -45,14 +44,8 @@ export interface ToolSpec<I extends z.ZodType = z.ZodType, O extends z.ZodType =
   run(input: z.output<I>, call: Call): Promise<Outcome<z.output<O>>>
 }
 
-/** The plugin's own tools. TODO(Slice 7): the first read tools. */
-export const OWN_SPECS: readonly ToolSpec[] = []
-
-/**
- * The source contract has no `spend` class (its classes are read, write, send, export and destructive), so a spend
- * method is described as `write`: a change, as the default rules treat it. The class only describes; the rules decide.
- * TODO(Slice 7): revisit if the source contract adds a cost class.
- */
+/** The source contract has no `spend` class (its classes are read, write, send, export and destructive), so a spend
+ * method is described as `write`: a change, as the default rules treat it. The class only describes; the rules decide. */
 export const methodClass = (toolClass: ToolClass): MethodClass => (toolClass === "read" ? "read" : "write")
 
 export function parse<I extends z.ZodType>(schema: I, input: unknown): z.output<I> {

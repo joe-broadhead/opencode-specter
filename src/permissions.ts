@@ -5,8 +5,8 @@ import type { Plugin } from "@opencode/plugin"
 import { type Access, errorText } from "./constants.js"
 import { reasonOf } from "./redact.js"
 import { mcpTools, type ToolClass } from "./specter-tools.js"
-import { OWN_SPECS } from "./tool-spec.js"
-import { TOOL_PREFIX } from "./tools.js"
+import { RESULTS_OPERATION, SUGGEST_OPERATION } from "./source/operations.js"
+import { OWN_TOOL_CLASSES, TOOL_PREFIX } from "./tools.js"
 
 export type Rule = { readonly action: string; readonly resource: string; readonly effect: "allow" | "ask" | "deny" }
 
@@ -17,16 +17,24 @@ export function changeEffect(access: Access): Rule["effect"] {
   return access === "all" ? "allow" : access === "ask-changes" ? "ask" : "deny"
 }
 
+/**
+ * The two provider operations the plugin asserts on a resource, `<account>:<operation>`, rather than on `*`: the
+ * saved-search results read and the free saved-search list that the source's `scope.suggest` binds. A source read
+ * asserts its own action and the operation, so both need a rule; both are reads, so both are allowed at every access.
+ */
+export const SOURCE_OPERATIONS: readonly string[] = [RESULTS_OPERATION, SUGGEST_OPERATION]
+
 /** Every classified tool, Specter's and the plugin's own, by class, without the prefix. */
 export function toolsOf(toolClass: ToolClass): string[] {
-  return [...new Set([...mcpTools(toolClass), ...OWN_SPECS.filter((spec) => spec.class === toolClass).map((spec) => spec.name)])].sort()
+  return [...new Set([...mcpTools(toolClass), ...Object.entries(OWN_TOOL_CLASSES).filter(([, value]) => value === toolClass).map(([name]) => name)])].sort()
 }
 
 /**
  * Broad first, narrow last, because the last matching rule wins. The first rule, `specter_*`, gives every tool the
- * change effect, so a tool the plugin has not classified (every MCP tool until Slice 3's capture) is treated like a
- * change. `read` tools are always allowed; `spend` and `write` tools get the change effect: allowed under `all`, asked
- * under `ask-changes`, denied under `read-only`.
+ * change effect, so a tool the plugin has not classified (Specter's MCP tools, until a live capture classifies them) is
+ * treated like a change. `read` tools are always allowed; `spend` and `write` tools get the change effect: allowed
+ * under `all`, asked under `ask-changes`, denied under `read-only`. The last two rules allow the operations a source
+ * read asserts on its own resource, so a read the host allows is not asked about again underneath.
  */
 export function defaultRules(access: Access = "all"): Rule[] {
   const change = changeEffect(access)
@@ -35,6 +43,7 @@ export function defaultRules(access: Access = "all"): Rule[] {
     ...toolsOf("read").map((name) => rule(name, "allow")),
     ...toolsOf("spend").map((name) => rule(name, change)),
     ...toolsOf("write").map((name) => rule(name, change)),
+    ...SOURCE_OPERATIONS.map((operation): Rule => ({ action: `${TOOL_PREFIX}read`, resource: `default:${operation}`, effect: "allow" })),
   ]
 }
 

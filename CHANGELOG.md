@@ -21,4 +21,15 @@ All notable changes to this project are documented here. The format follows [Kee
 - What Specter calls cost, from Specter's public pages with their sources (`docs/costs.md`), the MCP allowance in
   status, and an honest `jelly.cost` line.
 - Two separate sign-ins in Jelly: the MCP account, and the optional team key with a link to Specter's API Console.
-- The `specter` and `specter-write` skills, which name no tools yet.
+- The plugin's own four Specter tools on the team key, from Specter's public API reference: `specter_search_companies`
+  (Find company ID, free), `specter_get_company`, `specter_list_saved_searches` (free) and
+  `specter_saved_search_results`, each stating its published credit cost.
+- The `specter.saved` source under the source contract: the companies Specter added to one saved company search since
+  a cursor, as events, with the saved search's id as the scope key. Its cursor holds a watermark, the page within the
+  window and the ids of the page just listed, so a burst of additions drains page by page, the inclusive cutoff never
+  repeats a company, and a cursor older than Specter's 60-day window answers `gap` once and restarts after it instead
+  of sliding forward.
+- `specter_probe`, which names the team key's organisation from Specter's free credit-balance call.
+- `npm run conformance` runs the source contract's conformance kit over recorded Specter answers and writes
+  `reports/conformance-report.json` with `ok: true`.
+- The `specter` and `specter-write` skills name the tools that now exist, and each says what it costs.

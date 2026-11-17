@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { describe, expect, it } from "vitest"
 import { SPECTER_ERROR_CODES } from "../../src/api/specter-error.js"
+import { ERROR_CODES as SOURCE_CODES } from "@we-the-rebel-alliance/source-contract/events"
 import { CODES, RPC_CODES } from "../../src/constants.js"
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url))
@@ -49,8 +50,9 @@ describe("codes", () => {
     // ACCOUNT_UNKNOWN and RESOURCE_UNRESOLVED come from the shared tools RPC for features this plugin does not use.
     const known = new Set<string>([...CODES, ...RPC_CODES, "ACCOUNT_UNKNOWN", "RESOURCE_UNRESOLVED"])
     // Not codes: names a source quotes, such as header names written in capitals.
-    // Specter's own `errorCode` values, which src/api/specter-error.ts reads and the plugin maps to its codes.
-    const plain = new Set<string>(["X_API_KEY", ...SPECTER_ERROR_CODES])
+    // Specter's own `errorCode` values, which src/api/specter-error.ts reads and the plugin maps to its codes, and the
+    // source contract's own table, which src/source raises and carries as a SourceError.
+    const plain = new Set<string>(["X_API_KEY", ...SPECTER_ERROR_CODES, ...SOURCE_CODES])
     expect([...raised].filter((code) => !known.has(code) && !plain.has(code))).toEqual([])
   })
 

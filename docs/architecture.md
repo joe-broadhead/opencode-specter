@@ -12,11 +12,14 @@ server over OAuth and the plugin's own REST tools, all under the `specter_` pref
 | `src/options.ts` | Strict option parsing with zod; an unknown key is `OPTIONS_INVALID`. |
 | `src/permissions.ts` | The default rules from the three tool classes, inserted after each agent's base allow. |
 | `src/specter-tools.ts` | Specter's MCP tool table and classes. Empty until the live capture. |
-| `src/tool-spec.ts` | The plugin's own tools as specs (opencode-gws's pattern): one spec feeds the model's tool and the scripts' method. |
+| `src/tool-spec.ts` | A tool spec's shape, and how one becomes the model's tool and the scripts' method (opencode-gws's pattern). |
+| `src/read-tools.ts` | The plugin's four REST tools on the team key: `search_companies`, `get_company`, `list_saved_searches` and `saved_search_results`, each with its endpoint, its class and its published credit cost. |
+| `src/source/saved.ts` | `specter.saved`: the saved company search's net-new companies as events, its cursor, its gap and its probe. Pure, over an injected read. |
+| `src/source/index.ts` | The source as the plugin offers it: `events_list` and `probe` in the namespace and over the tools RPC, with the actions and operations they assert. |
 | `src/tools.ts` | The namespace description, `OWN_TOOLS`, `isServerTool`, and the count of the server's tools. |
 | `src/credential.ts` | The `specter` key integration, and reading the key at call time. |
 | `src/key-check.ts` | The key check: one free `GET /organization/credits` per key, again after 10 minutes, read as Specter's public docs describe the answers; any 403 but `NOT_PERMITTED` or a key refusal is "not confirmed". |
-| `src/api/request.ts` | The REST client (opencode-github's structure). No tool calls it yet. |
+| `src/api/request.ts` | The REST client (opencode-github's structure): the four tools and the source read through it. |
 | `src/api/specter-error.ts` | Specter's error object, mapped to the plugin's codes, from Specter's public Errors page. |
 | `src/costs.ts` | Specter's published costs, with their sources (`docs/costs.md`). Decides no permission. |
 | `src/tools-rpc.ts` | The tools RPC's plugin value and method table, for the source contract's `tools-rpc`. |
@@ -60,4 +63,15 @@ message. These retries are new to the family.
 ## Tools RPC
 
 `specter.deals.tools`, the source contract's transport with Specter's plugin value. Scripts call classified tools
-with no model, as a session and its agent, under a prior allow.
+with no model, as a session and its agent, under a prior allow. The table is the MCP tools the plugin has classified
+(none yet), the four REST tools, and the source's `events_list` and `probe`.
+
+## The saved-search source
+
+`specter.saved` is declared in `package.json`'s `sources`, so a consumer reads it from the installed package, never over
+RPC. `events_list` reads `GET /searches/companies/{searchId}/results` with the cursor's watermark, and asserts
+`specter_events_list` and `specter.read` on `<account>:searches.companies.results`; `probe` asks the free
+`GET /organization/credits` and asserts `specter_probe` alone. The two operations a source read asserts on a resource
+are allowed at every access by two rules at the end of the default block, so a read the host allows is not asked about
+again underneath. `npm run conformance` runs the source contract's kit over recorded Specter answers and writes
+`reports/conformance-report.json`; the report must say `ok: true`. No module in this plugin has called Specter.

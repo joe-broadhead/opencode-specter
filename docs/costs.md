@@ -61,6 +61,21 @@ day. Source: [Specter MCP - Usage & Pricing](https://intercom.help/specter-labs/
 
 Each REST reference page states its exact cost in a note at the top; that note is the source of truth.
 
+## What this plugin's own calls cost
+
+| Call | Endpoint | Cost |
+| --- | --- | --- |
+| `specter_search_companies` | `POST /companies/resolve` | Free |
+| `specter_get_company` | `GET /companies/{id}` | 1 credit per result returned; a miss costs nothing |
+| `specter_list_saved_searches` | `GET /searches` | Free |
+| `specter_saved_search_results` | `GET /searches/companies/{searchId}/results` | 1 credit per result returned |
+| `specter.saved`'s read | the same results endpoint, with `new_results_after` | 1 credit per result returned |
+| `specter_probe` | `GET /organization/credits` | Free |
+
+A page reports what it spent as `cost: { units: [{ per: "credit", count }] }`: the number of results Specter returned,
+the refused ones included, because it charged for them. There is no dollar figure, because Specter publishes none. The
+source's `sources` declaration states the same unit, and its `conditions` say that the zero it carries is not a price.
+
 ## What a credit costs
 
 Specter does not publish a price per credit: plans "scale from starter to enterprise", and the price is on request.

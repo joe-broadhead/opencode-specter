@@ -14,10 +14,20 @@ The transport is the source contract's (`@we-the-rebel-alliance/source-contract`
 | Method | Class | The tool |
 | --- | --- | --- |
 | `describe` | none | Lists every method with its class, its permission action and whether it can run now. |
+| `search_companies` | `read` | Resolve 1 to 50 domains to Specter company IDs. Free. |
+| `get_company` | `write` | One company's profile by its Specter ID. Spends credits. |
+| `list_saved_searches` | `read` | The saved searches shared with the API, as `{ options: [{ id, label }] }`. Free. |
+| `saved_search_results` | `write` | One saved company search's matches, page by page. Spends credits. |
+| `events_list` | `read` | The source's page: a saved company search's net-new companies as events, with a cursor. Spends credits. |
+| `probe` | `read` | The source's owner: the organisation the team key belongs to. Free. |
 
-No other method exists yet: Specter's MCP tools become methods once the plugin classifies them, and the plugin's own
-tools once they arrive. A method that spends credits is described with the class `write`, because the source contract
-has no cost class; the rules, not the class, decide whether it runs.
+Specter's MCP tools become methods once the plugin classifies them. A method that spends credits is described with the
+class `write`, because the source contract has no cost class; the rules, not the class, decide whether it runs. A
+source read also asserts its provider operation on `<account>:<operation>`, which the plugin's default rules allow, so a
+script that may call the method may run all of it.
+
+`events_list` is the source contract's method: `POST /api/rpc/specter.deals.tools/events_list` with
+`{"input":{"sessionID":"<id>","input":{"scope":{"search":"5432"},"cursor":"…"}}}`.
 
 ## A script runs as a session
 

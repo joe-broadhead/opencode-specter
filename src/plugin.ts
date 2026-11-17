@@ -4,19 +4,21 @@
 // transform is synchronous and never throws: a failure is kept and shown by status.
 import { type Mcp, Plugin } from "@opencode/plugin"
 import { registerToolsRpc } from "@we-the-rebel-alliance/source-contract/tools-rpc"
+import { request } from "./api/request.js"
 import { errorText, PLUGIN_ID, SERVER_NAME } from "./constants.js"
 import { keyReader, registerKeyIntegration } from "./credential.js"
 import { checkHost } from "./host-version.js"
 import { keyChecker } from "./key-check.js"
 import { loadOptions } from "./options.js"
 import { registerPermissionDefaults } from "./permissions.js"
+import { ownSpecs } from "./read-tools.js"
 import { reasonOf } from "./redact.js"
 import type { ServerSource } from "./rpc.js"
 import { registerSkills, SKILL_IDS, skillPath } from "./skills.js"
+import { assertAction, eventsMethod, probeMethod, registerSource, type SourceDeps } from "./source/index.js"
 import { registerStatus } from "./status.js"
-import { OWN_SPECS } from "./tool-spec.js"
-import { registerTools } from "./tools.js"
-import { METHODS, PLUGIN } from "./tools-rpc.js"
+import { OWN_TOOL_CLASSES, registerTools } from "./tools.js"
+import { methodTable, PLUGIN } from "./tools-rpc.js"
 
 /** Internal seam: tests point the server at a loopback fake, without OAuth. */
 export interface SpecterSeam {
@@ -112,8 +114,29 @@ export function createSpecterPlugin(seam: SpecterSeam) {
       const owned = () => source?.type === "plugin" || source?.type === "adopted"
       try {
         keep(await registerPermissionDefaults(ctx, options.access, report("rules")))
+        const readKey = keyReader(ctx.integration, warn)
+        const keys = keyChecker()
+        // The plugin's own tools and the source contract's methods read Specter's REST API with the team key, which is
+        // read at call time and only ever sent to the REST base.
+        const specs = ownSpecs({
+          key: async () => (await readKey())?.key,
+          timeoutMs: options.requestTimeoutMs,
+          assert: (call, action, resources) => assertAction(ctx.permission, action, call, resources),
+        })
+        const sourceDeps: SourceDeps = {
+          access: async (call) => {
+            const key = await readKey()
+            if (key === undefined) return undefined
+            return {
+              key: key.key,
+              read: (input) => request(input, { key: key.key, fetch, timeoutMs: options.requestTimeoutMs, signal: call.signal }),
+            }
+          },
+          permission: ctx.permission,
+        }
         // The namespace and the server's tool count; the MCP registration comes next, so ownership is read lazily.
-        const tools = keep(await registerTools(ctx, { access: options.access, owned, report: report("tools") }))
+        const tools = keep(await registerTools(ctx, { access: options.access, specs, owned, report: report("tools") }))
+        keep(await registerSource(ctx, sourceDeps))
         keep(
           await registerServer(ctx.mcp, serverConfig(seam), (next, problem) => {
             source = next
@@ -121,8 +144,6 @@ export function createSpecterPlugin(seam: SpecterSeam) {
           }),
         )
         keep(await registerKeyIntegration(ctx, report("integration")))
-        const readKey = keyReader(ctx.integration, warn)
-        const keys = keyChecker()
         keep(
           await registerStatus(ctx, {
             access: options.access,
@@ -141,12 +162,13 @@ export function createSpecterPlugin(seam: SpecterSeam) {
             keyCheck: (key) => keys.last(key),
             skills: SKILL_IDS.map((id) => ({ id, path: skillPath(id) })),
             problems: () => [...problems.values()],
-            needsKey: OWN_SPECS.length > 0,
+            needsKey: Object.keys(OWN_TOOL_CLASSES).length > 0,
           }),
         )
         // Scripts call every classified tool with no model, as a session and its agent: a call that spends credits or
         // changes data needs a prior allow rule for its action.
-        const stopTools = await registerToolsRpc(ctx as never, { plugin: PLUGIN, methods: METHODS, mcp: { server: SERVER_NAME, managed: owned } })
+        const methods = methodTable(specs, [eventsMethod(sourceDeps), probeMethod(sourceDeps)])
+        const stopTools = await registerToolsRpc(ctx as never, { plugin: PLUGIN, methods, mcp: { server: SERVER_NAME, managed: owned } })
         keep({ dispose: stopTools })
         keep(await registerSkills(ctx))
       } catch (error) {

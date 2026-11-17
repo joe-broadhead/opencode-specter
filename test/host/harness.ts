@@ -141,6 +141,9 @@ export async function specterServer(host: Host) {
 export const agentRules = async (host: Host) =>
   new Map((await host.client.agent.list({ location: host.location })).data.map((agent) => [agent.id as string, agent.permissions as Rule[]]))
 
+/** A session in the host's project, whose agent the host's rules are asserted against. */
+export const session = async (host: Host, agent = "build") => (await host.client.sessions.create({ agent, location: host.location })).id
+
 /** The status RPC, called through the probe plugin's context, as opencode-github's host tests call theirs. */
 export const status = (host: Host) => host.probe().rpc(SpecterRpc).status({}) as Promise<Status>
 

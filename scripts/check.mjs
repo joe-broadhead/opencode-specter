@@ -34,8 +34,8 @@ const stages = {
   typecheck: () => run("tsc", ["--noEmit", "-p", "tsconfig.json"]),
   // Vitest, as opencode-github runs its unit tests (vitest.config.ts defines __PLUGIN_VERSION__ as the build does).
   unit: () => run("vitest", ["run"]),
-  // The source contract's conformance kit over the declared source. TODO(Slice 8): Specter declares no source yet, so
-  // test/conformance holds a placeholder; Slice 8 adds the kit run, which writes reports/conformance-report.json.
+  // The source contract's conformance kit over the declared source: it runs the plugin's own events_list, probe and
+  // scope.suggest against recorded Specter answers and writes reports/conformance-report.json, which must say ok: true.
   conformance: () => run("bun", ["test", "./test/conformance"]),
   kit: () => run("node", ["--test", "scripts/release-kit.test.mjs"]),
   build: () => run("node", ["scripts/build.mjs"]),

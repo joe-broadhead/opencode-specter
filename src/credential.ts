@@ -48,13 +48,6 @@ export async function resolveKey(integration: Pick<Plugin.Context["integration"]
   return { key: value.key, source: "connected", ...(connection.type === "credential" ? { label: connection.label } : {}) }
 }
 
-/** The key for a call that needs it, or AUTH_REQUIRED. TODO(Slice 7): the first tools that call it. */
-export async function requireKey(read: () => Promise<SpecterKey | undefined>): Promise<SpecterKey> {
-  const key = await read()
-  if (key) return key
-  throw new SpecterPluginError("AUTH_REQUIRED", `No ${DISPLAY_NAME} team API key is connected.`, `Run /connect, choose ${DISPLAY_NAME} and paste the team API key.`)
-}
-
 /**
  * Reads the key and keeps the last good one in memory: when OpenCode cannot read it, the plugin warns, without the key,
  * and keeps using the last key it read. TODO(Slice 5): `watchKey`, which re-reads on credential and integration events,

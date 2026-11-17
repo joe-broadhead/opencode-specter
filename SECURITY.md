@@ -26,10 +26,12 @@ such as a 403 without Specter's error code), or not checked.
   and never on a redirect off that base. It never appears in an error, a status line, a log line or a result; a test
   checks this with a dummy key. There is no environment variable for it.
 - The key is the team's: Specter issues one per team, so it cannot be scoped down, and a leak carries its full rights.
-  Rotate it through Specter, never through the plugin: email api-support@tryspecter.com, as Specter's
-  [Authentication](https://api.tryspecter.com/api-ref/auth.md) page says, then paste the new key in `/connect` →
-  **Specter** on every machine. Status shows the old key as rejected once it re-checks it, which it does when its last answer is more than 10
-  minutes old.
+  Rotating it is the team's Specter admin's job, not this plugin's: the key is requested and replaced in the team's
+  [API Console](https://app.tryspecter.com/settings/api-console), and Specter's
+  [Authentication](https://api.tryspecter.com/api-ref/auth.md) page asks for a rotation by email to
+  api-support@tryspecter.com. After the rotation, paste the new key in `/connect` → **Specter** on every machine: the
+  plugin's own tools then fail with `KEY_REJECTED`, the source with `NEEDS_SIGN_IN`, and status shows the old key as
+  rejected once it re-checks it, which it does when its last answer is more than 10 minutes old.
 
 ### Untrusted content
 

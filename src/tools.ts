@@ -6,17 +6,19 @@
 import type { Plugin } from "@opencode/plugin"
 import { type Access, errorText, NAMESPACE_DESCRIPTION, SERVER_NAME } from "./constants.js"
 import { reasonOf } from "./redact.js"
-import { mcpToolClass } from "./specter-tools.js"
-import { buildTool, OWN_SPECS, type ToolSpec } from "./tool-spec.js"
+import { READ_TOOL_CLASSES } from "./read-tools.js"
+import { SOURCE_TOOL_CLASSES } from "./source/index.js"
+import { mcpToolClass, type ToolClass } from "./specter-tools.js"
+import { buildTool, type ToolSpec } from "./tool-spec.js"
 
 /** MCP tool names are `<server>_<tool>`; this is the prefix for the specter server, and for the plugin's own tools. */
 export const TOOL_PREFIX = `${SERVER_NAME}_`
 
-/**
- * The plugin's own tools: never Specter's server tools, so the count neither includes nor flags them.
- * TODO(Slice 8): add `specter_events_list`, the source contract's events tool.
- */
-export const OWN_TOOLS: ReadonlySet<string> = new Set(OWN_SPECS.map((spec) => `${TOOL_PREFIX}${spec.name}`))
+/** Every tool the plugin registers itself: its REST tools and the source contract's two methods, never Specter's. */
+export const OWN_TOOL_CLASSES: Readonly<Record<string, ToolClass>> = { ...READ_TOOL_CLASSES, ...SOURCE_TOOL_CLASSES }
+
+/** The plugin's own tools: never Specter's server tools, so the count neither includes nor flags them. */
+export const OWN_TOOLS: ReadonlySet<string> = new Set(Object.keys(OWN_TOOL_CLASSES).map((name) => `${TOOL_PREFIX}${name}`))
 
 /** The host gives each MCP tool its server name as the Code Mode namespace. */
 export function isServerTool(tool: { readonly id: string; readonly options?: { readonly namespace?: string } }): boolean {
@@ -32,14 +34,14 @@ export async function registerTools(
   ctx: ToolContext,
   input: {
     readonly access: Access
-    readonly specs?: readonly ToolSpec[]
+    readonly specs: readonly ToolSpec[]
     /** False while the `specter` name belongs to a server at another URL: its namespace is left as it is. */
     readonly owned: () => boolean
     readonly report: (problem: string | undefined) => void
   },
 ): Promise<{ dispose(): Promise<void>; tools(): ServerTools }> {
   let tools: ServerTools = { visible: 0, unknown: [] }
-  const specs = input.specs ?? OWN_SPECS
+  const specs = input.specs
   const registration = await ctx.tool.transform((editor) => {
     try {
       if (input.owned()) editor.namespace({ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION[input.access] })

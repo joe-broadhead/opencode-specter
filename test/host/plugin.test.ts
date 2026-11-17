@@ -6,8 +6,8 @@ import { KEY_INTEGRATION_ID, MCP_URL } from "../../src/constants.js"
 import { defaultRules } from "../../src/permissions.js"
 import { isStatus } from "../../src/rpc.js"
 import { DUMMY_KEY } from "../unit/fake.js"
-import { AUTHORIZATION_SERVER, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
-import { agentRules, cleanup, pluginState, specterServer, startHost, status, until } from "./harness.js"
+import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
+import { agentRules, cleanup, pluginState, session, specterServer, startHost, status, until } from "./harness.js"
 
 /** A GET over plain HTTP, outside the fetch router, which allows no loopback but the fake and follows no redirect. */
 function get(url: string): Promise<{ status: number; location: string | null }> {
@@ -22,6 +22,35 @@ function get(url: string): Promise<{ status: number; location: string | null }> 
 }
 
 afterAll(cleanup)
+
+let calls = 0
+
+/**
+ * Runs one of the plugin's own tools through the host's own executor, as the agent's session: any permission prompt is
+ * answered `decision`, and the call's output or error is returned. It proves the tool's key, its REST call and its
+ * permission, end to end.
+ */
+async function run(host: Awaited<ReturnType<typeof startHost>>, sessionID: string, tool: string, input: Record<string, unknown>, decision: "once" | "always" | "reject" = "reject") {
+  const executor = await until(`specter_${tool} is registered`, async () => (await host.probe().tool.list()).find((item) => item.id === `specter_${tool}`))
+  const context = { sessionID, agent: "build", messageID: "msg_host_test", id: `call_host_test_${++calls}`, signal: new AbortController().signal, progress: async () => {} }
+  let settled = false
+  const result = executor.execute(input as never, context as never).then(
+    (value) => ({ ok: true as const, value: value as { output?: unknown; content?: unknown } }),
+    (error: unknown) => ({ ok: false as const, error: error instanceof Error ? `${error.name}: ${error.message}` : String(error) }),
+  ).finally(() => (settled = true))
+  let asked: string | undefined
+  while (!settled) {
+    const pending = await host.client.permission.list({ sessionID })
+    const request = pending.find((item) => item.action === `specter_${tool}` || item.action === "specter.read" || item.action === "specter_get_company")
+    if (request) {
+      asked = request.action
+      await host.client.permission.reply({ sessionID, requestID: request.id, decision })
+      break
+    }
+    await Promise.race([result, Bun.sleep(25)])
+  }
+  return { asked, ...(await result) }
+}
 
 describe("the plugin in a host", () => {
   test("loads, registers the specter server, inserts the default rules and answers status with no upstream call", async () => {
@@ -152,6 +181,68 @@ describe("the plugin in a host", () => {
       await other.close()
     }
   }, 240_000)
+
+  test("runs the plugin's own free read against Specter with the team key, and the source's page on it", async () => {
+    const host = await startHost()
+    try {
+      host.fake.keys.add(DUMMY_KEY)
+      await host.client.integration.connect.key({ integrationID: KEY_INTEGRATION_ID, key: DUMMY_KEY, label: "team", location: host.location } as never)
+      const sessionID = await session(host)
+      // The free reads are allowed at every access, so nothing asks.
+      const listed = await run(host, sessionID, "list_saved_searches", {})
+      expect(listed.asked).toBeUndefined()
+      expect(listed.ok && (listed.value.output as { options: unknown[] }).options).toEqual([{ id: "5432", label: `${FAKE_SEARCHES[0]!.name} (companies, 1 new, 2 total)` }])
+      const resolved = await run(host, sessionID, "search_companies", { domains: [FAKE_COMPANY.website.domain] })
+      expect(resolved.ok && (resolved.value.output as { resolved: { matches: { id: string }[] }[] }).resolved[0]!.matches[0]!.id).toBe(FAKE_COMPANY.id)
+      // The source contract's read: its action and its operation are allowed, so nothing asks, and the page names the
+      // plugin's package and a cursor.
+      // An hour ago: a `since` older than Specter's 60-day window would answer a gap instead of a page.
+      const since = new Date(Date.now() - 3_600_000).toISOString()
+      const page = await run(host, sessionID, "events_list", { scope: { search: "5432" }, since })
+      expect(page.asked).toBeUndefined()
+      const output = page.ok ? (page.value.output as { events: { external_id: string; occurred_at: string }[]; cursor: string; plugin: string; scope: Record<string, string> }) : undefined
+      expect(output?.events.map((event) => event.external_id)).toEqual(["company:hedgehog"])
+      expect(output?.cursor).toEqual(expect.any(String))
+      expect(output?.plugin).toBe("@joe-broadhead/opencode-specter")
+      expect(output?.scope).toEqual({ search: "5432" })
+      // Every REST call carried the key in X-API-Key and nothing else, and only the documented paths were asked.
+      const rest = host.fake.requests.filter((request) => request.path.startsWith("/api/"))
+      expect(rest.every((request) => request.apiKey && !request.bearer)).toBe(true)
+      expect(rest.map((request) => `${request.method} ${request.path}`)).toContain("GET /api/v1/searches")
+      expect(rest.map((request) => `${request.method} ${request.path}`)).toContain("GET /api/v1/searches/companies/5432/results")
+      expect(JSON.stringify([listed, resolved, page])).not.toContain(DUMMY_KEY)
+    } finally {
+      await host.close()
+    }
+  }, 240_000)
+
+  test("treats a call that spends credits as a change: allowed at all, denied at read-only", async () => {
+    const host = await startHost()
+    try {
+      host.fake.keys.add(DUMMY_KEY)
+      await host.client.integration.connect.key({ integrationID: KEY_INTEGRATION_ID, key: DUMMY_KEY, label: "team", location: host.location } as never)
+      const sessionID = await session(host)
+      const charged = await run(host, sessionID, "get_company", { id: FAKE_COMPANY.id })
+      expect(charged.asked).toBeUndefined()
+      expect(charged.ok && (charged.value.output as { cost: { credits: number } }).cost.credits).toBe(1)
+    } finally {
+      await host.close()
+    }
+    const ro = await startHost({ options: { access: "read-only" } })
+    try {
+      ro.fake.keys.add(DUMMY_KEY)
+      await ro.client.integration.connect.key({ integrationID: KEY_INTEGRATION_ID, key: DUMMY_KEY, label: "team", location: ro.location } as never)
+      const sessionID = await session(ro)
+      const denied = await run(ro, sessionID, "get_company", { id: FAKE_COMPANY.id })
+      expect(denied.ok).toBe(false)
+      expect(!denied.ok && denied.error).toMatch(/permission|denied/i)
+      expect(ro.fake.requests.filter((request) => request.path === `/api/v1/companies/${FAKE_COMPANY.id}`)).toEqual([])
+      // A free read still runs with no key spend.
+      expect((await run(ro, sessionID, "list_saved_searches", {})).ok).toBe(true)
+    } finally {
+      await ro.close()
+    }
+  }, 300_000)
 
   test("refuses an unknown option, and a host outside the range", async () => {
     const typo = await startHost({ options: { acess: "all" } })

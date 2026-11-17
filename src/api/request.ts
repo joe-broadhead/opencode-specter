@@ -10,7 +10,8 @@
 // public docs and unverified live (https://api.tryspecter.com/api-ref/errors.md): retry only 429 and 5xx, never 400,
 // 401, 403, 404 or 422, stop on 402; on 429 wait for X-RateLimit-Reset (seconds); on 5xx back off exponentially from
 // about a second. A 503 that names a wait in Retry-After gets that wait. Failures are mapped by specter-error.ts.
-// The key check (key-check.ts) calls the free credit balance; the tools that call this arrive in Slice 7.
+// The key check (key-check.ts) calls the free credit balance; the plugin's four tools (read-tools.ts) and the source
+// (source/saved.ts) call the rest.
 import { API_KEY_HEADER, REST_BASE } from "../constants.js"
 import { SpecterPluginError } from "../errors.js"
 import { withoutSecret } from "../redact.js"
@@ -37,7 +38,7 @@ export type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 export interface RestInput {
   readonly method: Method
-  /** A path relative to the REST base, such as `/companies`. TODO(Slice 7): the paths come from the API reference. */
+  /** A path relative to the REST base, such as `/searches/companies/5432/results`, as Specter's API reference gives it. */
   readonly path: string
   readonly query?: Readonly<Record<string, string | number | boolean | readonly (string | number | boolean)[]>>
   readonly body?: unknown
@@ -71,6 +72,11 @@ export interface ApiOutput {
   readonly credits?: { readonly limit: number; readonly remaining: number; readonly resetSeconds?: number }
   /** X-Request-ID, which Specter's support asks for in a report. */
   readonly requestId?: string
+  /**
+   * The response's `Date` header, verbatim, when it carries one: the server's clock. A source's watermark is a server
+   * time, never the plugin's clock, because the provider stamps what it added with its own.
+   */
+  readonly serverTime?: string
   /** For a failure: the plugin's code and words, and Specter's `errorCode` when it sent one. */
   readonly error?: { readonly code: SpecterError["code"]; readonly message: string; readonly errorCode?: string }
   readonly attempts: number
@@ -295,6 +301,8 @@ function finish(response: Response, body: Body, attempts: number, toolClass: Too
   const rateLimit = meterOf(response.headers, "x-ratelimit")
   const credits = meterOf(response.headers, "x-creditlimit")
   const requestId = requestIdOf(response.headers)
+  const date = response.headers.get("date")?.trim()
+  const serverTime = date !== undefined && date !== "" && !Number.isNaN(Date.parse(date)) ? date : undefined
   // The error object is read before the body is capped, so a long result never hides it.
   const failure = response.ok ? undefined : specterErrorOf(response.status, body.data, response.headers, toolClass)
   const capped = body.data === undefined ? undefined : capInline(body.data)
@@ -309,6 +317,7 @@ function finish(response: Response, body: Body, attempts: number, toolClass: Too
     ...(rateLimit ? { rateLimit } : {}),
     ...(credits ? { credits } : {}),
     ...(requestId ? { requestId } : {}),
+    ...(serverTime ? { serverTime } : {}),
     ...(failure ? { error: { code: failure.code, message: failure.message, ...(failure.errorCode ? { errorCode: failure.errorCode } : {}) } } : {}),
     attempts,
     ...(nextStep ? { nextStep } : {}),
