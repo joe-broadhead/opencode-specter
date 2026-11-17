@@ -8,9 +8,10 @@ Unofficial; not affiliated with Specter.
 
 Specter is a trademark of its owner; this unofficial plugin is not endorsed by them.
 
-> **Scaffold.** This is v0.0.1 before its first release: the plugin registers Specter's hosted MCP server, declares
-> the Specter key sign-in, inserts its default rules and shows its status, and has no tools of its own yet. Nothing in
-> it calls Specter's REST API. The tool table fills from a live capture of Specter's server in a later step.
+> **Not yet released.** This is v0.0.1 before its first release: the plugin registers Specter's hosted MCP server,
+> declares the Specter key sign-in, inserts its default rules and shows its status, and has no tools of its own yet.
+> Its only call to Specter's REST API is the free key check. The tool table fills from a live capture of Specter's
+> server in a later step.
 
 ## Requirements
 
@@ -18,9 +19,14 @@ Specter is a trademark of its owner; this unofficial plugin is not endorsed by t
   too, and the status marks it untested. Outside `>=2.2.3 <2.4.0` the plugin does not load, unless you set
   [`allowUntestedHost`](docs/configuration.md#options).
 - macOS or Linux.
-- A Specter seat. Specter's MCP server signs each person in on their own. The plugin's own tools, when they arrive,
-  use one team-level Specter API key. TODO(Slice 0, B3): whether API access needs a separate order, and how to request it, is not
-  confirmed yet; this README states it once Specter confirms.
+- A Specter seat. Specter's MCP server signs each person in on their own, and is part of Specter's seat plan.
+- For the plugin's own tools, when they arrive: API access for your team. Specter's API needs at least one paid seat,
+  and the team's one API key lives in Specter's [API Console](https://app.tryspecter.com/settings/api-console). With
+  no key there yet, choose **Request API Access** in the console; Specter says it reviews requests within one business
+  day. API use is metered in credits, priced on request; a trial of 200 free credits can be requested in the same
+  console. Sources: Specter's [Authentication](https://api.tryspecter.com/api-ref/auth.md) and
+  [Plans & Pricing](https://api.tryspecter.com/api-ref/plans.md) pages. Not yet confirmed: whether a team with a seat
+  is approved without a separate API contract.
 
 ## Install
 
@@ -54,8 +60,15 @@ who made a call. OpenCode stores the key; the plugin reads it when a call needs 
 in the `X-API-Key` header, and never shows it in an error, a status line, a log line or a result. There is no
 environment variable for the key.
 
-TODO(Slice 1, B2): Specter's MCP sign-in flow is not verified yet. Whether it completes in OpenCode with no admin step decides
-whether the MCP server ships in the first release.
+Specter's MCP server publishes the sign-in metadata OpenCode uses: OAuth with PKCE, and both ways for OpenCode to
+identify itself (a client ID metadata document, or dynamic client registration). Specter documents no admin step for
+it ([How Specter MCP Authentication Works](https://intercom.help/specter-labs/en/articles/14495365-how-specter-mcp-authentication-works));
+your company's single sign-on may still ask an admin to approve a new app. The plugin's tests sign in against a fake
+built from that metadata. Not yet confirmed: a sign-in with a live Specter account.
+
+Each person gets 100 MCP tool calls a day. Past that, a call spends the team's API credits only if a Specter workspace
+admin turned on **Use API credits for MCP requests** in Specter's [MCP settings](https://app.tryspecter.com/settings/mcp);
+otherwise Specter declines it until the next day. See [What Specter calls cost](docs/costs.md).
 
 ## Use
 
@@ -91,8 +104,12 @@ The plugin works without options. The [configuration guide](docs/configuration.m
 An organisation can install the plugin for every user through OpenCode's system config:
 `/Library/Application Support/opencode/opencode.json` on macOS, `/etc/opencode/opencode.json` on Linux. Each member
 then signs in to the `specter` server, and someone with the team key pastes it in `/connect` → **Specter**. Never put
-the key in `opencode.json`. TODO(Slice 10): the key rotation runbook (who rotates it, and how everyone is told) is written before
-the first release.
+the key in `opencode.json`.
+
+To rotate the team key, for example after it leaked, email api-support@tryspecter.com, as Specter's
+[Authentication](https://api.tryspecter.com/api-ref/auth.md) page says. Then everyone pastes the new key in `/connect` →
+**Specter**. Until they do, calls with the old key fail with `KEY_REJECTED`, and `/specter-status` shows the key as
+rejected by Specter.
 
 ## Troubleshooting
 
@@ -148,12 +165,17 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 
 - **No tools yet.** Specter's MCP tools are not classified until the plugin captures the live server's tool list, and
   the plugin's own tools arrive in a later release.
-- **One team key.** It cannot be scoped down per person (assumed until Specter confirms), and every call with it
-  spends from one credit pool.
-- **Credit costs are unknown.** Whether Specter's MCP calls spend credits, and what each REST call costs, is not
-  measured yet. A result reports what it spent only if Specter's response says so; the plugin never estimates.
-- **Retries.** A free read is retried on a rate limit or a server error, honouring `Retry-After`; a call that may spend
-  credits is never retried.
+- **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
+  it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
+  per-member keys; the plugin has not been tried with one.
+- **Credit costs come from Specter's docs.** [What Specter calls cost](docs/costs.md) lists Specter's published rates
+  for each MCP tool and REST call, with their sources. They are not yet confirmed against live calls. A result
+  reports what it spent only if Specter's response says so; the plugin never estimates.
+- **Error meanings come from Specter's docs.** The codes for a refused key, spent credits, the daily credit limit and
+  the rest follow Specter's [Errors](https://api.tryspecter.com/api-ref/errors.md) page, not yet confirmed against live
+  responses.
+- **Retries.** A free read is retried on a rate limit, waiting the seconds Specter names in `X-RateLimit-Reset`, or on
+  a server error; a call that may spend credits is never retried, and nothing is retried after a 402.
 - **No browser automation.** Specter's terms forbid automated access outside its API; the plugin never drives the
   website.
 - **Specter content is not trusted.** A result can carry instructions; the skills tell the model not to follow them.
@@ -165,6 +187,8 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 - [Architecture](docs/architecture.md)
 - [Scripting](docs/scripting.md)
 - [In Jelly](docs/jelly.md)
+- [What Specter calls cost](docs/costs.md)
+- [Specter's MCP tools, a draft classification](docs/tool-classes.md)
 - [Security](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)

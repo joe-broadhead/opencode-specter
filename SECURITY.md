@@ -13,7 +13,8 @@ Report a vulnerability privately through GitHub's security advisories for this r
 ### Network access
 
 The plugin's own requests go only to Specter's REST API, `https://app.tryspecter.com/api/v1`. OpenCode itself talks
-to Specter's MCP server. No request goes anywhere else, and status makes no request at all.
+to Specter's MCP server. No request goes anywhere else. Status waits on no request: with a key connected, it starts
+the key check, one free `GET /organization/credits` per key, in the background, and shows its last answer.
 
 ### Credentials
 
@@ -22,8 +23,10 @@ to Specter's MCP server. No request goes anywhere else, and status makes no requ
   needs it, keeps it in memory, and sends it only in the `X-API-Key` header to the REST base: never to another origin,
   and never on a redirect off that base. It never appears in an error, a status line, a log line or a result; a test
   checks this with a dummy key. There is no environment variable for it.
-- The key is the team's: it cannot be scoped down (assumed until Specter confirms), so a leak carries its full rights.
-  Rotate it through Specter, never through the plugin. TODO(Slice 10): the rotation runbook is written before the first release.
+- The key is the team's: Specter issues one per team, so it cannot be scoped down, and a leak carries its full rights.
+  Rotate it through Specter, never through the plugin: email api-support@tryspecter.com, as Specter's
+  [Authentication](https://api.tryspecter.com/api-ref/auth.md) page says, then paste the new key in `/connect` →
+  **Specter** on every machine. The old key then fails with `KEY_REJECTED`.
 
 ### Untrusted content
 
