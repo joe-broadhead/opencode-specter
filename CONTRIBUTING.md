@@ -60,3 +60,6 @@ Versions follow semantic versioning on the plugin's contract: its options, the s
 Each release is the GitHub tag `v<version>`, made only by `.github/workflows/release.yml` after the owner approves the
 `release` environment. While changes land, their notes go under `## [Unreleased]` in `CHANGELOG.md`; a release-prep
 commit runs `node scripts/changelog.mjs release`. `package.json` stays `"private": true` and in canonical form.
+
+A pull request's CI runs the Linux runners only; the push to `master` runs every runner, Apple-silicon macOS
+(`macos-26`) too, and the release stands on that run. An Intel Mac (`macos-26-intel`) is not required.
