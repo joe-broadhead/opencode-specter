@@ -2,7 +2,7 @@
 // a busy search, a single burst, additions during paging, a late arrival, frequent polls), the family's three recurring
 // bugs, and the same probes again under each order Specter might answer in. No network, no key, no credit: the
 // recorded provider in test/support answers every read.
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { encodeBoundCursor } from "@we-the-rebel-alliance/source-contract/cursor"
 import type { EventsListResult } from "@we-the-rebel-alliance/source-contract/events"
 import { parseSourceError } from "@we-the-rebel-alliance/source-contract/events"
@@ -26,6 +26,9 @@ import {
   readsFor,
 } from "../../src/source/saved.js"
 import { FIXTURE, type Order, type Provider, failure, provider } from "../support/specter-provider.js"
+
+// Hundreds of reads a test, on the slowest runner too.
+vi.setConfig({ testTimeout: 120_000 })
 
 const NOW = Date.parse(FIXTURE.now)
 const MIN = 60_000

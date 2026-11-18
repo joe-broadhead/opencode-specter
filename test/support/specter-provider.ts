@@ -74,7 +74,12 @@ export interface Provider extends Read {
 
 export type Order = "held" | "newest" | "rank"
 
-const rankOf = (id: string): string => createHash("sha256").update(`rank:${id}`).digest("hex")
+const ranks = new Map<string, string>()
+const rankOf = (id: string): string => {
+  let rank = ranks.get(id)
+  if (rank === undefined) ranks.set(id, (rank = createHash("sha256").update(`rank:${id}`).digest("hex")))
+  return rank
+}
 
 /**
  * The provider: Specter's answers for the paths this plugin uses. `searchId`, `new_results_after`, `page` and `limit`
