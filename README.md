@@ -53,7 +53,7 @@ Specter has two sign-ins, and they are separate:
 | Entry | What it is | What it signs in |
 | --- | --- | --- |
 | The `specter` server (in `/mcps`) | Specter's hosted MCP server, `https://mcp.tryspecter.com/mcp`, with OpenCode's own OAuth sign-in. Yours alone. | Specter's own MCP tools. |
-| **Specter** (in `/connect`) | The plugin's key sign-in: paste the team's Specter API key. | The plugin's own Specter tools, when they arrive. |
+| **Specter** (in `/connect`) | The plugin's key sign-in: paste the team's Specter API key. | The plugin's own tools on Specter's REST API, and the `specter.saved` source. |
 
 The key is the team's: everyone who uses it spends from one credit pool and one rate limit, and Specter cannot tell
 who made a call. OpenCode stores the key; the plugin reads it when a call needs it, sends it only to Specter's REST API
@@ -75,8 +75,64 @@ otherwise Specter declines it until the next day. See [What Specter calls cost](
 Ask for what you need. The `specter` skill tells the model how to use Specter's tools; `specter-write` covers calls that
 spend credits or change Specter data.
 
-No tool is classified yet. Specter's own MCP tools appear under the `specter_` prefix once you sign in, and until the
-plugin classifies them each one is treated like a change (see [Permissions](#permissions)).
+The plugin's own tools read Specter's public REST API with the team key, and each says what it costs:
+
+| Tool | What it does | Cost |
+| --- | --- | --- |
+| `specter_search_companies` | Resolve 1 to 50 domains to Specter company IDs (Find company ID). | Free |
+| `specter_get_company` | One company's profile by its Specter ID. | 1 credit per result returned |
+| `specter_list_saved_searches` | The saved searches shared with the API, as `{ id, label }`. | Free |
+| `specter_saved_search_results` | One saved company search's matches, page by page, optionally only what was added since a moment. | 1 credit per result returned |
+
+Specter's own MCP tools appear under the same `specter_` prefix once you sign in. The plugin does not classify them
+until it has captured the live server's tool list, so each one is treated like a change (see
+[Permissions](#permissions)).
+
+## The saved-search source
+
+`specter.saved` is this plugin's one source under the source contract: the companies Specter **added to one saved
+company search**, as events, so Memory's collector or a script can follow a search without asking for the whole list
+again. It reads with the team key and spends one credit from the team's plan per company Specter returns.
+
+- **Scope.** The thing a person confirms is the saved search's id (`scope.search`), from `specter_list_saved_searches`.
+  The search must be shared to the API. People, talent and other products are not in this source: those are data about
+  individuals.
+- **Companies only, metadata only.** Each event carries the company's Specter id (`company:<id>`), its name, and the
+  read that first listed it. No profile prose, no contact details, no link (Specter's reference publishes no company-page
+  address).
+- **When it happened.** Specter's records carry no "added to the search" time, so an event's `occurred_at` is when the
+  read that first listed the company was answered, taken from Specter's own `Date` header. It is not the company's
+  `last_updated`, which says nothing about when the search matched it.
+- **Windows.** A read lists one *window*: the companies Specter returns for one `new_results_after` cutoff, page by
+  page by offset. The cutoff never moves inside a window, so a burst of companies added at one instant drains page by
+  page and never jams, at any `limit`. The next window starts two minutes *before* this window's first answer, so a
+  company added where the reader had already passed, or one that became visible late, is listed next time.
+- **The overlap and the gap.** After the first page each read also re-reads the five companies before its offset. If
+  none of the companies the window already listed is among them, more companies left the search ahead of the reader
+  than the overlap covers, so one may have been skipped: the page answers `gap` with reason `window-truncated`, once
+  per read, and reads on. Nothing is skipped without that gap, whatever order Specter answers in, provided companies
+  that stay in the search keep their order between two calls (a live check confirms it).
+- **No company listed twice.** The cursor carries a 40-bit hash of each company the recent windows listed (64 at most,
+  plus the 15 just before the offset), never the ids, and drops a company whose hash it carries. A company comes back
+  through the lookback only while its window's last read is within two minutes of the cutoff, so a group of hashes is
+  kept exactly that long. When more than 64 companies are in play at once (added within two minutes of a poll, plus
+  the poll's own), the excess may be listed again by the next read; never by the same read, unless more companies are
+  added ahead of it while it pages than the cursor keeps. Specter's inclusive cutoff ("on or after") is covered by the
+  same carry. The cursor's worst case is 976 characters, inside the contract's 1,024, and that budget is checked
+  before a single credit is spent.
+- **Credits per call.** One call asks Specter for at most 30 companies, so it costs at most 30 credits: a page of up to
+  25 and its overlap. The two minutes are an assumption until a live check measures the lag between an addition and
+  its visibility.
+- **60 days, then a gap.** Specter tracks additions for 60 days. A cursor older than that answers `gap` with reason
+  `expired` once, with `more: true` so the consumer reads on at once, and its cursor restarts at the earliest line
+  Specter can still serve — the window's edge, not "now" — so the sixty days Specter still holds are listed rather than
+  skipped. When Specter itself answers 422 for a cutoff, the same line is used unless the cursor is already at the edge,
+  where it restarts at "now" because nothing earlier is known to be readable.
+- **A cut answer is a failure.** A body cut at the read's inline limit, or a company record the plugin does not
+  recognise, fails the whole page with `UNAVAILABLE` and holds the cursor: no company is dropped silently, and the
+  credits reported are always what Specter returned.
+
+The contract's own documentation is in the [source contract](https://github.com/we-the-rebel-alliance/source-contract).
 
 ## Permissions
 
@@ -85,7 +141,7 @@ generates the block from three classes of tool:
 
 | Class | What it is | `all` (default) | `ask-changes` | `read-only` |
 | --- | --- | --- | --- | --- |
-| `read` | Free; changes nothing. | allow | allow | allow |
+| `read` | Changes nothing. Free, except a source's read, which Specter bills per company. | allow | allow | allow |
 | `spend` | Costs Specter credits from the team's pool. | allow | ask | deny |
 | `write` | Changes Specter data, such as a list. | allow | ask | deny |
 | not yet classified | Every tool the plugin does not know. | allow | ask | deny |
@@ -165,14 +221,43 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 
 ## Known limits
 
-- **No tools yet.** Specter's MCP tools are not classified until the plugin captures the live server's tool list, and
-  the plugin's own tools arrive in a later release.
+- **Not yet confirmed live.** Every endpoint, parameter, record shape and credit rate the plugin's own tools and the
+  source use comes from Specter's public API reference, recorded on 17 November 2026. No key has been used against
+  Specter yet, so the first live call may find a difference; `/specter-status` and the error's next step say what to do.
+- **Specter's MCP tools are not classified.** They appear in the namespace once you sign in, but a capture of the live
+  server's tool list has not run, so each one is treated like a change.
+- **The source is companies only.** People, talent, investor-interest and other products are data about individuals, so
+  `specter.saved` does not read them. Use the tools for a company search, and nothing here for a people search.
+- **The source lists what Specter returns, in Specter's order.** The order of results under `new_results_after` is not
+  documented, and the records carry no addition time, so an event's place in time is the read that first listed it.
+- **The key is one team's.** Specter issues one API key per team; rotating it is the team admin's job, through
+  `api-support@tryspecter.com` (see [SECURITY.md](SECURITY.md)).
+- **The source's read is a read.** It changes nothing, so the `access` option does not gate it, even though Specter
+  charges one credit per company: a consumer's own consent and budget decide whether it runs, and the `specter` skill
+  says never to call it to answer a question. The direct `specter_saved_search_results` and `specter_get_company` calls
+  are `spend`, and `access` gates those as changes.
+- **Credits for re-reads and refusals.** The page overlap and the lookback re-read companies Specter still returns, so
+  a poll can cost a few more credits than the events it carries; `cost` always reports what Specter returned. A page
+  that fails after Specter answered — a cut body, an unrecognised record, a rate limit on its second read — is still
+  charged, so an error that repeats costs credits until it is fixed.
+- **Shifts inside one window.** The page overlap recovers a company shifted back by fewer than five places (fewer than
+  the page when the caller's `limit` is below five). A larger shift between two page reads of one window answers one
+  `window-truncated` gap; the company it skipped is listed again only if it was added within the lookback.
+- **The lookback re-reads, and re-charges.** Every company added within two minutes before a poll is read by that poll
+  and again by the next, so a poll costs up to twice its new companies plus the overlaps. Polling more often than every
+  two minutes re-reads the last two minutes' companies on each poll; nothing is listed twice, but each re-read is
+  charged.
+- **A hash collision drops a company.** The cursor tells companies apart by 40 bits of their id's SHA-256; two ids that
+  share them make a new company look already listed. That is about once in 140,000 years at 100,000 new companies a
+  year.
 - **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
   it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
   per-member keys; the plugin has not been tried with one.
-- **Credit costs come from Specter's docs.** [What Specter calls cost](docs/costs.md) lists Specter's published rates
-  for each MCP tool and REST call, with their sources. They are not yet confirmed against live calls. A result
-  reports what it spent only if Specter's response says so; the plugin never estimates.
+- **Credit costs come from Specter's docs, and the dollar price is an estimate.** [What Specter calls cost](docs/costs.md)
+  lists Specter's published rates for each MCP tool and REST call, with their sources; they are not yet confirmed
+  against live calls. Specter publishes no price per credit, so the source's declaration states **about $0.10 a credit**
+  as an estimate, rounded up from comparable company-data APIs so it overstates rather than understates; your team's
+  contract rate replaces it. A result reports what it spent in credits, and the plugin never guesses more than this.
 - **Error meanings come from Specter's docs.** The codes for a refused key, spent credits, the daily credit limit and
   the rest follow Specter's [Errors](https://api.tryspecter.com/api-ref/errors.md) page, not yet confirmed against live
   responses.

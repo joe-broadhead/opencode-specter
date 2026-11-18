@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
 import { CODES, KEY_INTEGRATION_ID, KEY_METHOD_LABEL, SERVER_NAME } from "../../src/constants.js"
-import { CREDIT_PRICE_PUBLIC, MCP_DAILY_CALLS } from "../../src/costs.js"
+import { CREDIT_ESTIMATE_USD, CREDIT_PRICE_PUBLIC, MCP_DAILY_CALLS } from "../../src/costs.js"
 import { loadOptions, REQUEST_TIMEOUT } from "../../src/options.js"
 import { defaultRules } from "../../src/permissions.js"
 import { SKILL_IDS } from "../../src/skills.js"
 import { MCP_TOOLS } from "../../src/specter-tools.js"
-import { OWN_SPECS } from "../../src/tool-spec.js"
+import { OWN_TOOL_CLASSES } from "../../src/tools.js"
 import { TOOL_PREFIX } from "../../src/tools.js"
 import { type Declaration, type DeclaredTool, declarationProblems, docProblems, effectFromRules, lineProblems, readPackage } from "../support/jelly-kit.js"
 import { ACCESS_CHOICES, type PluginSetting, settingChoices, settingsProblems, settingValueIssue } from "../support/jelly-settings.js"
@@ -25,16 +25,15 @@ const jelly = manifest.jelly as Declaration & { cost?: string } & { rpc: unknown
 function knownTools(): Map<string, boolean> {
   const known = new Map<string, boolean>()
   for (const [name, toolClass] of Object.entries(MCP_TOOLS)) known.set(`${TOOL_PREFIX}${name}`, toolClass === "read")
-  for (const spec of OWN_SPECS) known.set(spec.action, spec.class === "read")
+  for (const [name, toolClass] of Object.entries(OWN_TOOL_CLASSES)) known.set(`${TOOL_PREFIX}${name}`, toolClass === "read")
   return known
 }
 
 describe("the jelly declaration", () => {
   it("follows the plugin authors' standard, with the effects the plugin's own default rules give", () => {
-    const problems = declarationProblems(ROOT, { effectOf: effectFromRules(defaultRules()) })
-    // TODO(Slice 3, Slice 7): no tool is declared until the capture and the first own tools; then this is [].
-    const expected = jelly.tools.length === 0 ? ["jelly.tools is empty"] : []
-    expect(problems).toEqual(expected)
+    // Specter's own MCP tools are not declared until a live capture classifies them; the plugin's own tools and the
+    // source contract's two methods are, and the standard is met exactly.
+    expect(declarationProblems(ROOT, { effectOf: effectFromRules(defaultRules()) })).toEqual([])
   })
 
   it("declares exactly the classified tools, marking the reads read-only: in step with the tool table", () => {
@@ -69,10 +68,12 @@ describe("the jelly declaration", () => {
 
   it("states the cost honestly: credits from one pool, no public price, the MCP allowance, a free key check", () => {
     expect(lineProblems("cost", jelly.cost, 300)).toEqual([])
-    expect(jelly.cost).toMatch(/credits from the team's one pool/)
-    expect(jelly.cost).toMatch(/publishes no price per credit/)
-    expect(jelly.cost).toContain(`${MCP_DAILY_CALLS} MCP tool calls a day`)
-    expect(jelly.cost).toMatch(/checking the key is free/)
+    expect(jelly.cost).toMatch(/credits from the team's plan/)
+    expect(jelly.cost).toMatch(/does not publish prices/)
+    expect(jelly.cost).toContain(`about $${CREDIT_ESTIMATE_USD.toFixed(2)} a credit as an estimate`)
+    expect(jelly.cost).toMatch(/team's contract rate replaces it/)
+    expect(jelly.cost).toMatch(/one credit per company/)
+    expect(jelly.cost).toMatch(/the key check is free/)
     expect(CREDIT_PRICE_PUBLIC).toBe(false)
   })
 

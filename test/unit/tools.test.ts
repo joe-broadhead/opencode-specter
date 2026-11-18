@@ -30,7 +30,7 @@ describe("the specter namespace", () => {
       { id: `${TOOL_PREFIX}a_tool`, options: { namespace: SERVER_NAME } },
       { id: "bash" },
     ])
-    const tools = await registerTools(ctx, { access: "ask-changes", owned: () => true, report: () => undefined })
+    const tools = await registerTools(ctx, { access: "ask-changes", specs: [], owned: () => true, report: () => undefined })
     expect(tools.tools()).toEqual({ visible: 2, unknown: [`${TOOL_PREFIX}a_tool`, `${TOOL_PREFIX}b_tool`] })
     expect(namespaces).toEqual([{ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION["ask-changes"] }])
   })
@@ -46,7 +46,7 @@ describe("the specter namespace", () => {
 
   it("leaves the namespace alone while another server owns the name", async () => {
     const { ctx, namespaces } = toolContext([])
-    await registerTools(ctx, { access: "all", owned: () => false, report: () => undefined })
+    await registerTools(ctx, { access: "all", specs: [], owned: () => false, report: () => undefined })
     expect(namespaces).toEqual([])
   })
 })

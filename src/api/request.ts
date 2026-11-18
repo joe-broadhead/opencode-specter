@@ -10,7 +10,8 @@
 // public docs and unverified live (https://api.tryspecter.com/api-ref/errors.md): retry only 429 and 5xx, never 400,
 // 401, 403, 404 or 422, stop on 402; on 429 wait for X-RateLimit-Reset (seconds); on 5xx back off exponentially from
 // about a second. A 503 that names a wait in Retry-After gets that wait. Failures are mapped by specter-error.ts.
-// The key check (key-check.ts) calls the free credit balance; the tools that call this arrive in Slice 7.
+// The key check (key-check.ts) calls the free credit balance; the plugin's four tools (read-tools.ts) and the source
+// (source/saved.ts) call the rest.
 import { API_KEY_HEADER, REST_BASE } from "../constants.js"
 import { SpecterPluginError } from "../errors.js"
 import { withoutSecret } from "../redact.js"
@@ -37,12 +38,18 @@ export type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 export interface RestInput {
   readonly method: Method
-  /** A path relative to the REST base, such as `/companies`. TODO(Slice 7): the paths come from the API reference. */
+  /** A path relative to the REST base, such as `/searches/companies/5432/results`, as Specter's API reference gives it. */
   readonly path: string
   readonly query?: Readonly<Record<string, string | number | boolean | readonly (string | number | boolean)[]>>
   readonly body?: unknown
   /** The calling tool's class: only a `read` is retried (D6). */
   readonly class: ToolClass
+  /**
+   * The inline cap for this answer's JSON, in bytes: MAX_INLINE_BYTES unless a caller reads for itself and keeps only
+   * a field or two (the source does). A body over it is `truncated`, and a source treats that as a failure rather than
+   * a short page.
+   */
+  readonly maxInlineBytes?: number
 }
 
 export interface RequestDeps {
@@ -65,12 +72,22 @@ export interface ApiOutput {
   readonly data?: unknown
   readonly contentType?: string
   readonly truncated: boolean
+  /**
+   * For an array body, how many items the provider returned, counted before the inline cap: what it charged for, and
+   * how many a caller that must not lose one has to account for.
+   */
+  readonly itemsReturned?: number
   /** X-RateLimit-Limit, -Remaining and -Reset (seconds), as Specter's docs name them; unverified live. */
   readonly rateLimit?: { readonly limit: number; readonly remaining: number; readonly resetSeconds?: number }
   /** X-CreditLimit-Limit, -Remaining and -Reset (seconds), which Specter's docs say come on 402 and 429. */
   readonly credits?: { readonly limit: number; readonly remaining: number; readonly resetSeconds?: number }
   /** X-Request-ID, which Specter's support asks for in a report. */
   readonly requestId?: string
+  /**
+   * The response's `Date` header, verbatim, when it carries one: the server's clock. A source's watermark is a server
+   * time, never the plugin's clock, because the provider stamps what it added with its own.
+   */
+  readonly serverTime?: string
   /** For a failure: the plugin's code and words, and Specter's `errorCode` when it sent one. */
   readonly error?: { readonly code: SpecterError["code"]; readonly message: string; readonly errorCode?: string }
   readonly attempts: number
@@ -154,7 +171,7 @@ export async function request(input: RestInput, deps: RequestDeps): Promise<ApiO
       await sleep(wait, deps.signal)
       continue
     }
-    return finish(response, await readBody(response, input.method, deps.key), attempt, input.class)
+    return finish(response, await readBody(response, input.method, deps.key), attempt, input)
   }
 }
 
@@ -291,24 +308,30 @@ function meterOf(headers: Headers, prefix: string): ApiOutput["rateLimit"] {
 }
 
 /** The output for a response: status, rate limit, a capped body, and a next step for failures. */
-function finish(response: Response, body: Body, attempts: number, toolClass: ToolClass): ApiOutput {
+function finish(response: Response, body: Body, attempts: number, input: RestInput): ApiOutput {
   const rateLimit = meterOf(response.headers, "x-ratelimit")
   const credits = meterOf(response.headers, "x-creditlimit")
   const requestId = requestIdOf(response.headers)
+  const date = response.headers.get("date")?.trim()
+  const serverTime = date !== undefined && date !== "" && !Number.isNaN(Date.parse(date)) ? date : undefined
   // The error object is read before the body is capped, so a long result never hides it.
-  const failure = response.ok ? undefined : specterErrorOf(response.status, body.data, response.headers, toolClass)
-  const capped = body.data === undefined ? undefined : capInline(body.data)
+  const failure = response.ok ? undefined : specterErrorOf(response.status, body.data, response.headers, input.class)
+  const inline = input.maxInlineBytes ?? MAX_INLINE_BYTES
+  const capped = body.data === undefined ? undefined : capInline(body.data, inline)
   const truncated = body.truncated || capped?.truncated === true
-  const nextStep = failure?.next ?? (truncated ? "The result was cut at 100,000 bytes. Narrow the query." : undefined)
+  const itemsReturned = Array.isArray(body.data) ? body.data.length : undefined
+  const nextStep = failure?.next ?? (truncated ? `The result was cut at ${inline.toLocaleString("en-GB")} bytes. Narrow the query.` : undefined)
   return {
     ok: response.ok,
     status: response.status,
     ...(capped ? { data: capped.data } : {}),
     ...(body.contentType ? { contentType: body.contentType } : {}),
     truncated,
+    ...(itemsReturned === undefined ? {} : { itemsReturned }),
     ...(rateLimit ? { rateLimit } : {}),
     ...(credits ? { credits } : {}),
     ...(requestId ? { requestId } : {}),
+    ...(serverTime ? { serverTime } : {}),
     ...(failure ? { error: { code: failure.code, message: failure.message, ...(failure.errorCode ? { errorCode: failure.errorCode } : {}) } } : {}),
     attempts,
     ...(nextStep ? { nextStep } : {}),
@@ -325,20 +348,20 @@ export function upstreamError(output: ApiOutput): SpecterPluginError {
   return new SpecterPluginError(output.error?.code ?? "UPSTREAM_ERROR", `${output.error?.message ?? `Specter answered with HTTP ${output.status}.`}${id}`, output.nextStep ?? "Run /specter-status, then try again.")
 }
 
-/** Keeps the inline result under MAX_INLINE_BYTES: whole list items where it can, else a cut text. */
-function capInline(value: unknown): { data: unknown; truncated: boolean } {
+/** Keeps the inline result under `maxBytes`: whole list items where it can, else a cut text. */
+function capInline(value: unknown, maxBytes: number): { data: unknown; truncated: boolean } {
   const size = (item: unknown) => Buffer.byteLength(typeof item === "string" ? item : (JSON.stringify(item) ?? ""))
-  if (size(value) <= MAX_INLINE_BYTES) return { data: value, truncated: false }
-  if (typeof value === "string") return { data: Buffer.from(value).subarray(0, MAX_INLINE_BYTES).toString("utf8"), truncated: true }
+  if (size(value) <= maxBytes) return { data: value, truncated: false }
+  if (typeof value === "string") return { data: Buffer.from(value).subarray(0, maxBytes).toString("utf8"), truncated: true }
   if (Array.isArray(value)) {
     const kept: unknown[] = []
     let used = 2
     for (const item of value) {
       used += size(item) + 1
-      if (used > MAX_INLINE_BYTES) break
+      if (used > maxBytes) break
       kept.push(item)
     }
     return { data: kept, truncated: true }
   }
-  return { data: Buffer.from(JSON.stringify(value)).subarray(0, MAX_INLINE_BYTES).toString("utf8"), truncated: true }
+  return { data: Buffer.from(JSON.stringify(value)).subarray(0, maxBytes).toString("utf8"), truncated: true }
 }

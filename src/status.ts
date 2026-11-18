@@ -31,7 +31,7 @@ export type StatusDeps = {
   readonly keyCheck: (key: string) => KeyCheck
   readonly skills: readonly SkillPath[]
   readonly problems: () => readonly string[]
-  /** Whether any of the plugin's own tools needs the team key. None does until Slice 7. */
+  /** Whether any of the plugin's own tools needs the team key: four of them do, and the source reads with it too. */
   readonly needsKey: boolean
 }
 

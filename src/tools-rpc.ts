@@ -8,10 +8,11 @@
  *
  * A script runs as a session and the agent it names; the rule for the method's permission action is resolved before
  * dispatch, and only `allow` runs. An MCP method runs through OpenCode's own executor with OpenCode's own sign-in; a
- * plugin method runs the same spec as the model's tool (tool-spec.ts).
+ * plugin method runs the same spec as the model's tool (tool-spec.ts), and a source method asserts its action and the
+ * provider operation it reads (source/).
  *
- * The table is empty until Slice 3 classifies Specter's MCP tools and Slice 7 adds the plugin's own. TODO(Slice 8):
- * `events_list` and `probe`, from the source contract.
+ * The MCP table is empty until a live capture classifies Specter's tools; the plugin's own four REST tools and the
+ * source's `events_list` and `probe` are here now.
  */
 import type { Failure, McpResult, MethodSpec, NextSteps, ShapeCall, ToolsRpcPlugin } from "@we-the-rebel-alliance/source-contract/tools-rpc"
 import { toolsRpcId } from "@we-the-rebel-alliance/source-contract/tools-rpc"
@@ -19,18 +20,31 @@ import { DISPLAY_NAME, PLUGIN_ID, SERVER_NAME } from "./constants.js"
 import { SpecterPluginError } from "./errors.js"
 import { STATUS_COMMAND } from "./rpc.js"
 import { MCP_TOOLS } from "./specter-tools.js"
-import { methodClass, OWN_SPECS, scriptMethod } from "./tool-spec.js"
+import { methodClass, scriptMethod, type ToolSpec } from "./tool-spec.js"
+import { OWN_TOOL_CLASSES } from "./tools.js"
 
 /** The RPC's id: the plugin's id and `.tools`. Scripts call it by name, so it never changes. */
 export const TOOLS_RPC_ID = toolsRpcId(PLUGIN_ID)
 
-/** Every classified Specter MCP tool, by its upstream name, and the plugin's own tools from their specs. */
-export const METHODS: readonly MethodSpec[] = [
-  ...Object.entries(MCP_TOOLS)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([name, toolClass]): MethodSpec => ({ kind: "mcp", name, class: methodClass(toolClass) })),
-  ...OWN_SPECS.map(scriptMethod),
-]
+/**
+ * The methods a script can call: every Specter MCP tool the plugin has classified, the plugin's own REST tools, and
+ * the source contract's `events_list` and `probe`. The tables come from `specter-tools.ts`, `read-tools.ts` and
+ * `source/`, so `describe` cannot drift from what is registered.
+ */
+export function methodTable(specs: readonly ToolSpec[], source: readonly MethodSpec[]): MethodSpec[] {
+  return [
+    ...Object.entries(MCP_TOOLS)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([name, toolClass]): MethodSpec => ({ kind: "mcp", name, class: methodClass(toolClass) })),
+    ...specs.map(scriptMethod),
+    ...source,
+  ]
+}
+
+/** Every method's name, sorted: the tools-RPC surface without building the specs, for a check that keeps it honest. */
+export function methodNames(): string[] {
+  return [...Object.keys(MCP_TOOLS), ...Object.keys(OWN_TOOL_CLASSES)].sort()
+}
 
 /** What the model path's `execute.before` hooks do to an MCP call's arguments. Specter has none. */
 export function shapeInput(_method: string, input: unknown, _call: ShapeCall): unknown {

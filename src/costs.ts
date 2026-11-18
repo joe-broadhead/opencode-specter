@@ -77,9 +77,15 @@ export const REST_COST_RULES: readonly { readonly calls: string; readonly cost: 
 
 /**
  * What a credit costs in money is not public: Specter's plans "scale from starter to enterprise … Talk to us", and a
- * trial is 200 free credits on request (COST_SOURCES.plans).
+ * trial is 200 free credits on request (COST_SOURCES.plans). The plugin still has to state a price in a source's
+ * `cost`, which source-contract requires to be dollars, so it states an **estimate** — never a Specter price. It is
+ * rounded up from what comparable company-data APIs charge per record, so it overstates rather than understates, and
+ * a team's own contract rate replaces it. `package.json` `sources.items[0].cost.units[0].usd` is the same number, and
+ * a test keeps the two equal.
  */
 export const CREDIT_PRICE_PUBLIC = false
+/** The plugin's estimate for one credit, in US dollars: an overstatement, replaced by a team's own rate. */
+export const CREDIT_ESTIMATE_USD = 0.1
 export const TRIAL_CREDITS = 200
 
 /** One line for status: how MCP calls use credits, as Specter's docs say. */

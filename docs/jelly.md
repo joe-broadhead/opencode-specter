@@ -9,10 +9,13 @@ tile, not Specter's logo.
 
 ## Tools and permissions
 
-0 tools are declared (0 read-only). Nothing is declared until the plugin has classified Specter's MCP tools from a live
-capture of the server's tool list, and until its own tools exist. A tool that is not declared still follows the access
-choice, as the block below says. `test/unit/jelly.test.ts` keeps `jelly.tools` in step with the tool table, and checks
-each declared effect against the plugin's own default rules.
+6 tools are declared (4 read-only): the plugin's own four on Specter's REST API, and the source contract's
+`events_list` and `probe`. The four reads — finding a company's ID, listing saved searches, and the source's two
+methods — never change anything; `get_company` and `saved_search_results` spend Specter credits, so they are not
+read-only and follow the access choice as changes. Specter's own MCP tools are not declared until a live capture
+classifies them; a tool that is not declared still follows the access choice, as the block below says.
+`test/unit/jelly.test.ts` keeps `jelly.tools` in step with the tool tables, and checks each declared effect against the
+plugin's own default rules.
 
 The family's shared rules, word for word from Jelly's guide:
 

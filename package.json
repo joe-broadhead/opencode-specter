@@ -106,8 +106,45 @@
     "title": "Specter",
     "summary": "Specter deal data: companies, their profiles and signals.",
     "icon": "assets/icon.svg",
-    "cost": "Specter bills in credits from the team's one pool and publishes no price per credit. Each person gets 100 MCP tool calls a day; past that, calls spend team credits only if a Specter admin allows it. Calls with the team key spend credits per result; checking the key is free.",
-    "tools": [],
+    "cost": "Specter bills in credits from the team's plan, and does not publish prices: the plugin states about $0.10 a credit as an estimate, and your team's contract rate replaces it. get_company, saved_search_results and the saved-search source each spend one credit per company; the key check is free.",
+    "tools": [
+      {
+        "name": "specter.search_companies",
+        "permission": "specter_search_companies",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "specter.get_company",
+        "permission": "specter_get_company",
+        "effect": "allow",
+        "readOnly": false
+      },
+      {
+        "name": "specter.list_saved_searches",
+        "permission": "specter_list_saved_searches",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "specter.saved_search_results",
+        "permission": "specter_saved_search_results",
+        "effect": "allow",
+        "readOnly": false
+      },
+      {
+        "name": "specter.events_list",
+        "permission": "specter_events_list",
+        "effect": "allow",
+        "readOnly": true
+      },
+      {
+        "name": "specter.probe",
+        "permission": "specter_probe",
+        "effect": "allow",
+        "readOnly": true
+      }
+    ],
     "skills": [
       "specter",
       "specter-write"
@@ -176,5 +213,55 @@
         }
       ]
     }
+  },
+  "sources": {
+    "contractVersion": 1,
+    "rpc": "specter.deals.tools",
+    "probe": {
+      "action": "specter_probe"
+    },
+    "items": [
+      {
+        "id": "specter.saved",
+        "kind": "events",
+        "reads": "x-specter/company",
+        "tool": "events_list",
+        "input": {
+          "source": "saved"
+        },
+        "accounts": {
+          "named": false
+        },
+        "scope": {
+          "keys": [
+            "search"
+          ],
+          "describe": "The saved company search to read, by the id the free saved-search list shows.",
+          "suggest": {
+            "tool": "list_saved_searches",
+            "operations": [
+              "searches.list"
+            ]
+          }
+        },
+        "permission": {
+          "events": "specter_events_list",
+          "operations": [
+            "searches.companies.results"
+          ]
+        },
+        "private": true,
+        "cost": {
+          "class": "metered",
+          "units": [
+            {
+              "per": "company",
+              "usd": 0.1
+            }
+          ]
+        },
+        "maxBytes": 65536
+      }
+    ]
   }
 }

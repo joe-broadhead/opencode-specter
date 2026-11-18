@@ -29,6 +29,27 @@ export const FAKE_TOOLS = [
  */
 export const FAKE_BALANCE = { credit_limit: 1000, used: 10, remaining: 990, unlimited: false, daily_cap: 0, daily_used: 0, daily_remaining: 0 }
 
+/**
+ * The REST API's other answers, in the shapes Specter's public reference documents (a `SavedSearchListItem` array from
+ * GET /searches, a `CompanyV1Response` from GET /companies/{id} and from a saved search's results, and the find-ID
+ * groups from POST /companies/resolve). Invented companies and numbers.
+ */
+export const FAKE_SEARCHES = [
+  { id: 5432, name: "Europe series A", product_type: "companies", query_id: "q_company_1", new_count: 1, full_count: 2, owner_id: "owner_1", is_global: false },
+]
+export const FAKE_COMPANY = {
+  id: "hedgehog",
+  organization_name: "Hedgehog Analytics",
+  website: { domain: "hedgehog-analytics.example", url: "https://hedgehog-analytics.example" },
+  hq: { city: "London", country: "United Kingdom" },
+  employee_count: 39,
+  founded_year: 2019,
+  industry: "Data & Analytics",
+  growth_stage: "seed",
+  funding: { total_funding_usd: 16600000, last_funding_type: "seed" },
+  last_updated: "2026-11-01",
+}
+
 interface FakeRequest {
   readonly method: string
   readonly path: string
@@ -203,8 +224,20 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
         if (!fake.keys.has(key)) return json(401, { errorCode: "API_KEY_NOT_VALID", message: "API key present, but not valid" }, requestId)
         return json(200, FAKE_BALANCE, requestId)
       }
-      // The rest of the REST API: nothing else is served yet, because no tool calls it.
-      return json(404, { errorCode: "NOT_FOUND", message: "Not Found" }, requestId)
+      // The plugin's own tools and its source, as Specter's reference documents them. The balance above is free; these
+      // cost credits, which this fake does not meter.
+      const failed = (errorCode: string) => json(404, { errorCode, message: "Not Found" }, requestId)
+      if (url.pathname === "/api/v1/searches" && request.method === "GET") {
+        if (!request.headers.has("x-api-key") || !fake.keys.has(request.headers.get("x-api-key")!)) return json(401, { errorCode: "API_KEY_NOT_VALID", message: "API key present, but not valid" }, requestId)
+        return json(200, FAKE_SEARCHES, requestId)
+      }
+      if (url.pathname === "/api/v1/companies/resolve" && request.method === "POST") {
+        const body = (await request.json().catch(() => ({}))) as { to_resolve?: { domain?: string }[] }
+        return json(200, (body.to_resolve ?? []).map((item) => ({ query: { domain: item.domain }, matches: item.domain === FAKE_COMPANY.website.domain ? [{ id: FAKE_COMPANY.id, name: FAKE_COMPANY.organization_name, domain: item.domain, hq: FAKE_COMPANY.hq, founded_year: 2019, match_confidence: 1 }] : [] })), requestId)
+      }
+      if (url.pathname === `/api/v1/companies/${FAKE_COMPANY.id}` && request.method === "GET") return json(200, FAKE_COMPANY, requestId)
+      if (/^\/api\/v1\/searches\/companies\/5432\/results$/.test(url.pathname) && request.method === "GET") return json(200, [FAKE_COMPANY], requestId)
+      return failed("NOT_FOUND")
     },
   })
 
