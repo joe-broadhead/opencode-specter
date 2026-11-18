@@ -82,13 +82,30 @@ the refused and the repeated ones included, because it charged for them. The sou
 the estimate above (`sources.items[0].cost.units[0].usd`), which is what a consumer shows at consent; it is not a
 Specter price.
 
-The source's own reads cost a little more than the companies they list, and that is by design: after the first page it
-re-reads the previous page's last five companies, and the next window starts two minutes before the previous window's
-first answer. Every company Specter returns is charged, so a poll can cost a few credits more than the events it
-carries. A window that listed more than 20 companies cannot be de-duplicated by the cursor, so its lookback is skipped
-rather than re-charging the burst, and one `window-truncated` gap reports the two minutes that were not re-read. A body
-cut at the read's 8 MB inline limit, or a record the plugin does not recognise, fails the page instead
-(`UNAVAILABLE`) — and a page that fails after Specter answered is still charged.
+The source's own reads cost more than the companies they list, by design. After the first page each read re-reads the
+five companies before its offset, and each window starts two minutes before the previous window's first answer, so a
+company added within two minutes before a poll is read by that poll and again by the next. A call asks for at most 30
+companies (a page of up to 25 and its overlap), so it costs at most 30 credits; a poll costs up to twice its new
+companies plus five per page. Polling more often than every two minutes re-reads the last two minutes' companies on
+every poll: nothing is listed twice, but every re-read is charged. A body cut at the read's 8 MB inline limit, or a
+record the plugin does not recognise, fails the page instead (`UNAVAILABLE`), and a page that fails after Specter
+answered is still charged.
+
+### What the source's cursor waits on
+
+The cursor is built so that its correctness rests on as little as possible, and these live checks settle the rest
+(one trial key; record each answer and its URL here and in `src/source/saved.ts`):
+
+1. **Order between calls (A1).** Page a search of 60 or more with `limit=25` twice a minute apart, with
+   `new_results_after` fixed, and compare: companies present in both answers must keep their relative order.
+   The overlap's gap detection rests on it; a search that re-ranks between calls could skip a company unannounced.
+2. **Lag between an addition and its visibility (A2).** Add a company to a test search (or watch one appear), note
+   when it is first returned, and read with `new_results_after` set just after that moment: the lag must stay under
+   two minutes (`LOOKBACK_MS`).
+3. **The `Date` header.** Present on every results answer, in seconds, from the clock that stamps additions.
+4. **Record size.** The real bytes per company, against the 256 KB budget that sets the 25-company page.
+5. **Credits.** The balance before and after a page, an overlap read and a lookback re-read: one credit per result
+   returned, re-reads included.
 
 ## What a credit costs
 

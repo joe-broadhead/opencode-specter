@@ -25,15 +25,17 @@ All notable changes to this project are documented here. The format follows [Kee
   (Find company ID, free), `specter_get_company`, `specter_list_saved_searches` (free) and
   `specter_saved_search_results`, each stating its published credit cost.
 - The `specter.saved` source under the source contract: the companies Specter added to one saved company search since
-  a cursor, as events, with the saved search's id as the scope key. Its cursor holds the window's watermark, the page
-  within it and a 16-hex hash per company the last read saw (worst case 922 characters, checked before any read), so a
-  burst drains page by page without jamming. A two-minute lookback and a five-company page overlap catch companies
-  added mid-window, shifted by a re-match, or visible late; both re-reads are charged, and repeats are dropped by id.
-  A cursor older than Specter's 60-day window answers `gap` once, with `more: true`, and restarts at the window's edge
-  rather than at "now". A cut answer or an unrecognised record fails the page (`UNAVAILABLE`) with the cursor held, so
-  no company is lost and the credits reported are what Specter returned. A window that listed more than the cursor can
-  carry (20 companies) is not re-read and re-charged by the lookback: its lookback is skipped and one
-  `window-truncated` gap reports the two minutes that were not re-read.
+  a cursor, as events, with the saved search's id as the scope key. A read pages one window (a fixed
+  `new_results_after`) by offset, so a burst drains at any limit without jamming; the next window starts two minutes
+  before this one's first answer, so a company added behind the reader or visible late is listed next time. Each page
+  after the first re-reads the five companies before it: when none of them is one the window listed, a shift may have
+  skipped one, and the page answers one `window-truncated` gap. The cursor carries 40-bit hashes of the companies the
+  recent windows listed (64, plus the 15 before the offset), each group kept only while the lookback can reach it, so
+  no company is listed twice unless more than 64 are in play at once (worst case 976 characters, checked before any
+  read). A call costs at most 30 credits. A cursor older than Specter's 60-day window answers `gap` once, with
+  `more: true`, and restarts at the window's edge rather than at "now". A cut answer or an unrecognised record fails
+  the page (`UNAVAILABLE`) with the cursor held, so no company is lost and the credits reported are what Specter
+  returned.
 - `specter_probe`, which names the team key's organisation from Specter's free credit-balance call.
 - `npm run conformance` runs the source contract's conformance kit over recorded Specter answers and writes
   `reports/conformance-report.json` with `ok: true`.

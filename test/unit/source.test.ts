@@ -4,10 +4,10 @@ import { type SourceEvent, parseSourceError } from "@we-the-rebel-alliance/sourc
 import type { EventsListResult } from "@we-the-rebel-alliance/source-contract/events"
 import {
   ACCOUNT,
-  CARRY_PINNED,
-  CARRY_RECENT,
-  MAX_CARRIED,
+  LOOKBACK_MS,
+  MAX_CALL_CREDITS,
   MAX_PAGE,
+  cursorAt,
   RETENTION_DAYS,
   type Read,
   type SourceAccess,
@@ -75,19 +75,23 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(page.refused).toEqual([{ external_id: "company:secretco", reason: "secret", detail: expect.stringContaining("api key") }])
   })
 
-  it("carries the watermark, page and boundary ids in a cursor bound to the source, the account and the search", async () => {
+  it("carries the window's cutoff, its next cutoff and the listed companies' hashes in a cursor bound to the search", async () => {
     const read = provider()
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, read)
     const cursor = page.cursor
     expect(cursor.length).toBeLessThanOrEqual(1024)
     const state = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Record<string, unknown>
     expect(state["s"]).toBe("saved")
-    // Hashes, never ids: 16 hex characters each, whatever the ids' length.
-    expect(state["k"]).toEqual(expect.any(Array))
-    for (const hash of state["k"] as string[]) expect(hash).toMatch(/^[0-9a-f]{10}$/)
-    // The window is done, so the watermark is the lookback line before its first observation, and the page is 0.
-    expect(state["w"]).toBe(new Date(NOW - 120_000).toISOString())
-    expect(state["p"]).toBe(0)
+    // The window is done: the next one starts LOOKBACK before this one's first answer, at offset 0, and carries what
+    // this one listed as one group, as packed 40-bit hashes, never the ids.
+    expect(state["w"]).toBe((NOW - LOOKBACK_MS) / 1000)
+    expect(state["f"]).toBe(0)
+    const groups = state["P"] as [number, string][]
+    expect(groups).toHaveLength(1)
+    expect(groups[0]![0]).toBe(NOW / 1000 + 1)
+    // Every company the read consumed, the one refused for a secret included, so it is not refused again.
+    expect(Buffer.from(groups[0]![1], "base64url").length).toBe(5 * (page.events.length + (page.refused?.length ?? 0)))
+    expect(cursor).not.toContain("hedgehog")
   })
 
   it("never repeats a company the inclusive cutoff lists again at the boundary", async () => {
@@ -123,7 +127,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
   it("answers an older watermark as gap { reason: expired } once, and restarts after it without sliding", async () => {
     const read = provider()
     const stale = new Date(NOW - (RETENTION_DAYS + 1) * 86_400_000).toISOString()
-    const cursor = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, k: [] })
+    const cursor = cursorAt(SEARCH, stale)
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor }, read)
     expect(page.gap).toEqual({ reason: "expired", since: stale })
     expect(page.events).toEqual([])
@@ -133,26 +137,25 @@ describe("specter.saved: a saved company search's net-new results", () => {
     // The 60-day window is checked before any call, so a gap costs nothing.
     expect(read.calls).toEqual([])
     // The restart line is the window's edge, not "now": everything Specter still holds is listed rather than skipped.
+    const edge = (NOW - RETENTION_DAYS * 86_400_000 + 3_600_000) / 1000
     const restart = JSON.parse(Buffer.from(page.cursor, "base64url").toString("utf8")) as Record<string, unknown>
-    expect(restart["w"]).toBe(new Date(NOW - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
-    expect(restart).not.toHaveProperty("g")
+    expect(restart["w"]).toBe(edge)
+    // The read that answered the gap carries the mark, so none of its later pages answers it again.
+    expect(restart["g"]).toBe(1)
 
-    // The same expired cursor read again answers the same gap. Its restart is the window's edge for that read, which
-    // is never "now": the sixty days Specter still holds are always re-read, at worst a minute of them twice.
+    // The same expired cursor read again answers the same gap, with that read's edge, never "now".
     const again = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor }, read, NOW + 600_000)
     expect(again.gap).toEqual({ reason: "expired", since: stale })
-    expect(JSON.parse(Buffer.from(again.cursor, "base64url").toString("utf8"))["w"]).toBe(new Date(NOW + 600_000 - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
+    expect(JSON.parse(Buffer.from(again.cursor, "base64url").toString("utf8"))["w"]).toBe(edge + 600)
 
-    // A company added a minute after the restart must be listed by the next read, however late the read happens: the
-    // watermark comes from the cursor, never from "now".
+    // A company added a minute after the restart is listed by the next read, however late it happens: the watermark
+    // comes from the cursor, never from "now".
     read.companies.push({ id: "novaworks", added: "2026-11-08T12:01:00.000Z", organization_name: "Nova Works" })
     read.advance(3_600_000)
     const next = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: page.cursor }, read, read.now())
     expect(ids(next)).toContain("company:novaworks")
     expect(next.gap).toBeUndefined()
-    // The read that answered the gap set the window; a read an hour later still asks from that line, not from its own
-    // clock, so nothing between them is skipped.
-    expect((read.calls.at(-1)!.query ?? {})["new_results_after"]).toBe(new Date(NOW - RETENTION_DAYS * 86_400_000 + 3_600_000).toISOString())
+    expect((read.calls.at(-1)!.query ?? {})["new_results_after"]).toBe(new Date(edge * 1000).toISOString())
   })
 
   it("answers Specter's own retention error as the same gap, never as an upstream failure", async () => {
@@ -169,9 +172,9 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: { search: "not-a-number" } }, read))).code).toBe("INPUT_INVALID")
     expect((await refused(list({ source: "other", account: ACCOUNT, scope: SCOPE }, read))).code).toBe("SOURCE_UNKNOWN")
     expect((await refused(list({ source: "saved", account: "someone", scope: SCOPE }, read))).code).toBe("ACCOUNT_MISMATCH")
-    const foreign = encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, k: [] })
+    const foreign = encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: 1, f: 0 })
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: foreign }, read))).code).toBe("CURSOR_INVALID")
-    const otherSearch = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, k: [] })
+    const otherSearch = cursorAt("9999", SINCE)
     expect((await refused(list({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: otherSearch }, read))).code).toBe("CURSOR_INVALID")
   })
 
@@ -207,12 +210,12 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(first.asOf).toBe(FIXTURE.now)
   })
 
-  it("keeps a page inside its bounds: the limit, and at most MAX_PAGE companies", async () => {
+  it("keeps a page inside its bounds: the limit, at most MAX_PAGE companies, and at most MAX_CALL_CREDITS a call", async () => {
     const read = provider()
     const page = await list({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE, limit: 500 }, read)
     expect(page.events.length).toBeLessThanOrEqual(MAX_PAGE)
     expect(Number((read.calls[0]!.query ?? {})["limit"])).toBe(MAX_PAGE)
-    expect(MAX_CARRIED).toBe(CARRY_PINNED + CARRY_RECENT)
+    expect(MAX_CALL_CREDITS).toBe(30)
   })
 })
 

@@ -17,7 +17,7 @@ import { type Sources, SOURCES_SCHEMA } from "@we-the-rebel-alliance/source-cont
 import { CREDIT_ESTIMATE_USD } from "../../src/costs.js"
 import { ownSpecs } from "../../src/read-tools.js"
 import { assertAction, fingerprintOf, type SourceCall, type SourceDeps, runEvents, runProbe } from "../../src/source/index.js"
-import { ACCOUNT, RETENTION_DAYS, ownerOf } from "../../src/source/saved.js"
+import { ACCOUNT, RETENTION_DAYS, cursorAt, ownerOf } from "../../src/source/saved.js"
 import { OWN_TOOL_CLASSES } from "../../src/tools.js"
 import { TOOLS_RPC_ID } from "../../src/tools-rpc.js"
 import { FIXTURE, provider } from "../support/specter-provider.js"
@@ -75,18 +75,18 @@ const cases: PageCase[] = []
   const first = await cursorFor({ source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE })
   const done = await cursorFor({ source: "saved", account: ACCOUNT, scope: SCOPE, cursor: first })
   const stale = new Date(NOW - (RETENTION_DAYS + 1) * 86_400_000).toISOString()
-  const elsewhere = encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: { search: "9999" } }, { w: SINCE, p: 0, k: [] })
+  const elsewhere = cursorAt("9999", SINCE)
   cases.push(
     { name: "a first listing from since, one company refused for a secret in its name", input: { source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE }, expect: "page" },
     { name: "what came after the first listing: the inclusive boundary's repeat is dropped", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: first }, expect: "page" },
     { name: "the first listing two at a time, so the window pages", input: { source: "saved", account: ACCOUNT, scope: SCOPE, since: SINCE, limit: 2 }, expect: "page" },
     { name: "nothing new since the last listing", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: done }, expect: "empty" },
-    { name: "a cursor whose watermark is older than Specter's 60-day window", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "specter", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: stale, p: 0, k: [] }) }, expect: "expired" },
+    { name: "a cursor whose watermark is older than Specter's 60-day window", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: cursorAt(SCOPE.search, stale) }, expect: "expired" },
     { name: "a cursor for another saved search", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: elsewhere }, expect: { refuses: "CURSOR_INVALID" } },
     { name: "a read that names no saved search", input: { source: "saved", account: ACCOUNT }, expect: { refuses: "INPUT_INVALID" } },
     { name: "another source's name", input: { source: "companies", account: ACCOUNT, scope: SCOPE }, expect: { refuses: "SOURCE_UNKNOWN" } },
     { name: "another account", input: { source: "saved", account: "someone", scope: SCOPE }, expect: { refuses: "ACCOUNT_MISMATCH" } },
-    { name: "a cursor bound to another plugin", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: SINCE, p: 0, k: [] }) }, expect: { refuses: "CURSOR_INVALID" } },
+    { name: "a cursor bound to another plugin", input: { source: "saved", account: ACCOUNT, scope: SCOPE, cursor: encodeBoundCursor({ plugin: "y", source: "saved", account: ACCOUNT, scope: SCOPE }, { w: 1, f: 0 }) }, expect: { refuses: "CURSOR_INVALID" } },
   )
 }
 

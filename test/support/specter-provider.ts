@@ -4,6 +4,7 @@
 // `added` is this fixture's stand-in for the moment Specter added a company to the search, which its records do not
 // carry: the results endpoint filters on it (`new_results_after` is inclusive), exactly as Specter's reference says
 // the cutoff works, so the cursor's boundary behaviour is exercised for real.
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import type { ApiOutput, RestInput } from "../../src/api/request.js"
 import type { Read } from "../../src/source/saved.js"
@@ -63,7 +64,17 @@ export interface Provider extends Read {
   failNext(answer: ApiOutput | undefined): void
   /** Companies the provider holds, to add one between reads. */
   readonly companies: FixtureCompany[]
+  /**
+   * The order results come in, which Specter does not document: as held (`held`, the default: an addition pushed
+   * last sorts last), newest addition first (`newest`), or a stable order unrelated to time (`rank`, by a hash of the
+   * id, so an addition can land anywhere). The source must lose nothing under any of them.
+   */
+  setOrder(order: Order): void
 }
+
+export type Order = "held" | "newest" | "rank"
+
+const rankOf = (id: string): string => createHash("sha256").update(`rank:${id}`).digest("hex")
 
 /**
  * The provider: Specter's answers for the paths this plugin uses. `searchId`, `new_results_after`, `page` and `limit`
@@ -74,6 +85,7 @@ export function provider(fixture: Fixture = FIXTURE): Provider {
   const companies = fixture.companies.map((company) => ({ ...company }))
   let clock = Date.parse(fixture.now)
   let next: ApiOutput | undefined
+  let order: Order = "held"
   const at = () => new Date(clock).toISOString()
   const read = (async (input: RestInput): Promise<ApiOutput> => {
     calls.push(input)
@@ -111,6 +123,8 @@ export function provider(fixture: Fixture = FIXTURE): Provider {
       const page = Number(query["page"] ?? 0)
       const limit = Number(query["limit"] ?? 50)
       const matching = companies.filter((item) => Date.parse(item.added) >= after)
+      if (order === "newest") matching.reverse().sort((x, y) => Date.parse(y.added) - Date.parse(x.added))
+      if (order === "rank") matching.sort((x, y) => (rankOf(x.id) < rankOf(y.id) ? -1 : 1))
       return ok(matching.slice(page * limit, page * limit + limit), at())
     }
     return failure(404, "NOT_FOUND")
@@ -121,6 +135,7 @@ export function provider(fixture: Fixture = FIXTURE): Provider {
     now: { value: () => clock },
     advance: { value: (ms: number) => void (clock += ms) },
     failNext: { value: (answer: ApiOutput | undefined) => void (next = answer) },
+    setOrder: { value: (value: Order) => void (order = value) },
   })
   return read
 }
