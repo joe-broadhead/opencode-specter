@@ -13,6 +13,7 @@ import { loadOptions } from "./options.js"
 import { registerPermissionDefaults } from "./permissions.js"
 import { ownSpecs } from "./read-tools.js"
 import { reasonOf } from "./redact.js"
+import { vendorCallsAllowed } from "./release.js"
 import type { ServerSource } from "./rpc.js"
 import { registerSkills, SKILL_IDS, skillPath } from "./skills.js"
 import { assertAction, eventsMethod, probeMethod, registerSource, type SourceDeps } from "./source/index.js"
@@ -137,12 +138,24 @@ export function createSpecterPlugin(seam: SpecterSeam) {
         // The namespace and the server's tool count; the MCP registration comes next, so ownership is read lazily.
         const tools = keep(await registerTools(ctx, { access: options.access, specs, owned, report: report("tools") }))
         keep(await registerSource(ctx, sourceDeps))
-        keep(
-          await registerServer(ctx.mcp, serverConfig(seam), (next, problem) => {
-            source = next
-            report("server")(problem)
-          }),
-        )
+        if (vendorCallsAllowed()) {
+          keep(
+            await registerServer(ctx.mcp, serverConfig(seam), (next, problem) => {
+              source = next
+              report("server")(problem)
+            }),
+          )
+        } else {
+          // A source install must not ask OpenCode to connect to Specter's MCP server. The tool handlers stay and
+          // answer NOT_RELEASED. A tagged install, or a test that simulates one, still registers the server.
+          report("server")(
+            errorText(
+              "NOT_RELEASED",
+              "This copy is not a released install, so Specter was not called.",
+              "Wait for a release tag. Do not install this repository from source if you need to call Specter.",
+            ),
+          )
+        }
         keep(await registerKeyIntegration(ctx, report("integration")))
         keep(
           await registerStatus(ctx, {

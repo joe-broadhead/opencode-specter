@@ -17,6 +17,7 @@
  */
 import { errorCodeOf, KEY_REFUSALS } from "./api/specter-error.js"
 import { API_KEY_HEADER, REST_BASE } from "./constants.js"
+import { isLoopback, vendorCallsAllowed } from "./release.js"
 
 /**
  * `unconfirmed`: Specter answered, but not in a way that says whether it accepts the key. `unchecked`: Specter could
@@ -33,8 +34,11 @@ export const KEY_RECHECK_MS = 10 * 60_000
 const MAX_ERROR_BYTES = 16_384
 
 /** Asks Specter whether it accepts `key`. Never throws. `base` is REST_BASE unless a test points at a fake. */
-export async function checkKey(key: string, fetcher: typeof fetch = fetch, base: string = REST_BASE): Promise<KeyCheck> {
+export async function checkKey(key: string, fetcher: typeof fetch = fetch, base: string = REST_BASE, released = false): Promise<KeyCheck> {
   try {
+    const target = new URL(base)
+    // The live fetch is the vendor. A source install sends nothing; a test's fetcher or a loopback fake still runs.
+    if (fetcher === fetch && !isLoopback(target) && !vendorCallsAllowed({ released })) return "unchecked"
     const response = await fetcher(`${base.replace(/\/$/, "")}${KEY_CHECK_PATH}`, {
       method: "GET",
       headers: { Accept: "application/json", "User-Agent": "opencode-specter", [API_KEY_HEADER]: key },
