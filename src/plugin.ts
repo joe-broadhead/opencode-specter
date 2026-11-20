@@ -13,7 +13,7 @@ import { loadOptions } from "./options.js"
 import { registerPermissionDefaults } from "./permissions.js"
 import { ownSpecs } from "./read-tools.js"
 import { reasonOf } from "./redact.js"
-import { vendorCallsAllowed } from "./release.js"
+import { configureReleaseGate, vendorCallsAllowed } from "./release.js"
 import type { ServerSource } from "./rpc.js"
 import { registerSkills, SKILL_IDS, skillPath } from "./skills.js"
 import { assertAction, eventsMethod, probeMethod, registerSource, type SourceDeps } from "./source/index.js"
@@ -104,9 +104,13 @@ export function createSpecterPlugin(seam: SpecterSeam) {
         registrations.push(registration)
         return registration
       }
+      let disposed = false
       const cleanup = async () => {
+        disposed = true
         for (const registration of registrations.splice(0).reverse()) await registration.dispose()
       }
+      // The host does not list the plugin itself during setup; the gate reads its report once the entry is there.
+      configureReleaseGate(() => ctx.plugin.list)
       // Transforms replay on every rebuild, so each one overwrites its own entry rather than appending.
       const problems = new Map<string, string>()
       const report = (area: string) => (problem: string | undefined) => void (problem ? problems.set(area, problem) : problems.delete(area))
@@ -138,24 +142,39 @@ export function createSpecterPlugin(seam: SpecterSeam) {
         // The namespace and the server's tool count; the MCP registration comes next, so ownership is read lazily.
         const tools = keep(await registerTools(ctx, { access: options.access, specs, owned, report: report("tools") }))
         keep(await registerSource(ctx, sourceDeps))
-        if (vendorCallsAllowed()) {
-          keep(
-            await registerServer(ctx.mcp, serverConfig(seam), (next, problem) => {
-              source = next
-              report("server")(problem)
-            }),
-          )
-        } else {
-          // A source install must not ask OpenCode to connect to Specter's MCP server. The tool handlers stay and
-          // answer NOT_RELEASED. A tagged install, or a test that simulates one, still registers the server.
-          report("server")(
-            errorText(
-              "NOT_RELEASED",
-              "This copy is not a released install, so Specter was not called.",
-              "Wait for a release tag. Do not install this repository from source if you need to call Specter.",
-            ),
-          )
-        }
+        // Registering the MCP server is a setup-time decision, but the answer is not available during setup: the host
+        // adds the plugin's own entry to `ctx.plugin.list` only after setup returns. So watch for it, then register;
+        // a source install never registers the server (fail closed) and the tools answer NOT_RELEASED.
+        void (async () => {
+          for (let attempt = 0; attempt < 25 && !disposed; attempt++) {
+            if (await vendorCallsAllowed()) {
+              if (disposed) return
+              try {
+                const registered = await registerServer(ctx.mcp, serverConfig(seam), (next, problem) => {
+                  source = next
+                  report("server")(problem)
+                })
+                if (disposed) await registered.dispose().catch(() => undefined)
+                else keep(registered)
+              } catch (error) {
+                report("server")(
+                  errorText("SERVER_NOT_REGISTERED", `The ${SERVER_NAME} MCP server could not be registered (${reasonOf(error)}).`, "Restart OpenCode."),
+                )
+              }
+              return
+            }
+            await new Promise((resolve) => setTimeout(resolve, 200))
+          }
+          if (!disposed) {
+            report("server")(
+              errorText(
+                "NOT_RELEASED",
+                "This copy is not a released install, so Specter was not called.",
+                "Wait for a release tag. Do not install this repository from source if you need to call Specter.",
+              ),
+            )
+          }
+        })()
         keep(await registerKeyIntegration(ctx, report("integration")))
         keep(
           await registerStatus(ctx, {

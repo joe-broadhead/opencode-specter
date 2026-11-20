@@ -38,7 +38,7 @@ export async function checkKey(key: string, fetcher: typeof fetch = fetch, base:
   try {
     const target = new URL(base)
     // The live fetch is the vendor. A source install sends nothing; a test's fetcher or a loopback fake still runs.
-    if (fetcher === fetch && !isLoopback(target) && !vendorCallsAllowed({ released })) return "unchecked"
+    if (fetcher === fetch && !isLoopback(target) && !(await vendorCallsAllowed({ released }))) return "unchecked"
     const response = await fetcher(`${base.replace(/\/$/, "")}${KEY_CHECK_PATH}`, {
       method: "GET",
       headers: { Accept: "application/json", "User-Agent": "opencode-specter", [API_KEY_HEADER]: key },

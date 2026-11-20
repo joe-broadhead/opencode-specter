@@ -227,7 +227,7 @@ async function send(url: URL, input: RestInput, deps: RequestDeps): Promise<Resp
     const timeout = AbortSignal.timeout(deps.timeoutMs)
     const signal = deps.signal ? AbortSignal.any([deps.signal, timeout]) : timeout
     // A source install must not call Specter. A test's own fetch, a loopback fake, or a simulated release still runs.
-    if (deps.fetch === fetch && !isLoopback(current) && !vendorCallsAllowed({ released: deps.released })) {
+    if (deps.fetch === fetch && !isLoopback(current) && !(await vendorCallsAllowed({ released: deps.released }))) {
       throw new SpecterPluginError(
         "NOT_RELEASED",
         "This copy is not a released install, so Specter was not called.",
