@@ -4,7 +4,7 @@
  * keep the handlers. There is no tag to invent: package.json stays 0.0.1 until a release exists.
  */
 import { execFileSync } from "node:child_process"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -26,11 +26,6 @@ export function releaseTagIn(text: string | undefined): string | undefined {
   return match === null ? undefined : match[0].replace(/^[#/@]/, "")
 }
 
-/** True when this process was loaded from a path that names a release tag. A source checkout does not. */
-export function installedFromReleaseTag(moduleUrl = import.meta.url): boolean {
-  return releaseTagIn(moduleUrl) !== undefined
-}
-
 /**
  * Tests, and the host harness, set this so the existing handlers still run against a fake. `undefined` clears it.
  * Production code does not call it, and it does not invent a tag.
@@ -50,16 +45,49 @@ export function isLoopback(url: URL): boolean {
 }
 
 /** True only for a real semver tag on this install, or a test that simulated one. */
+/** This plugin's own repository and package: a release install comes from it, and no other one is a release here. */
+const OWNER = "joe-broadhead"
+const REPO = "opencode-specter"
+const PACKAGE = "@joe-broadhead/opencode-specter"
+
 export function installAllows(source?: InstallSource): boolean {
   if (simulated()) return true
-  if (source?.type === "package") {
-    // The host reports the spec in `target` (`…#v0.0.1`) and the resolved commit in `version`; only the tag counts.
-    const at = source.target === undefined ? -1 : source.target.lastIndexOf("#")
-    return at !== -1 && SEMVER_TAG.test(decodeTag(source.target!.slice(at + 1)))
-  }
+  if (source?.type === "package") return packageTagged(source.target)
   if (source?.type === "local") return exactGitTag(source.path ?? "")
   if (source?.type === "builtin" || source?.type === "sdk") return false
-  return installedFromReleaseTag() || exactGitTag(packageDir())
+  // No report yet: only a checkout that is exactly at a tag is a release. The loaded module's path is not consulted:
+  // a folder named after a tag is not a tag.
+  return exactGitTag(packageDir())
+}
+
+/**
+ * A package spec's verdict: a semver tag in the spec, the spec naming this plugin's own repository (when it names one),
+ * and the installed package being this plugin. Another repo's tag, or a tag-named folder around a copy, is not a release.
+ */
+function packageTagged(target: string | undefined): boolean {
+  if (target === undefined) return false
+  const at = target.lastIndexOf("#")
+  if (at === -1 || !SEMVER_TAG.test(decodeTag(target.slice(at + 1)))) return false
+  const repo = repositoryIn(target)
+  if (repo !== undefined && (repo.owner !== OWNER || repo.name !== REPO)) return false
+  return ownPackage()
+}
+
+/** The GitHub repository a package spec names, in the forms a real install records; undefined for a file or npm spec. */
+function repositoryIn(target: string): { owner: string; name: string } | undefined {
+  const spec = target.split("#")[0]!
+  const match = /^(?:github:|git\+https:\/\/github\.com\/|https:\/\/github\.com\/|git\+ssh:\/\/git@github\.com\/)([^/]+)\/([^/]+?)(?:\.git)?$/.exec(spec)
+  return match === null ? undefined : { owner: match[1]!, name: match[2]! }
+}
+
+/** True when the installed package is this plugin's own, read from its package.json. */
+function ownPackage(): boolean {
+  try {
+    const manifest = JSON.parse(readFileSync(join(packageDir(), "package.json"), "utf8")) as { name?: unknown }
+    return manifest.name === PACKAGE
+  } catch {
+    return false
+  }
 }
 
 function decodeTag(value: string): string {
@@ -91,7 +119,7 @@ export async function vendorCallsAllowed(options: { readonly released?: boolean;
   if (verdict !== undefined) return verdict
   inflight ??= (async () => {
     const source = await sourceFromHost()
-    if (source === undefined) return installedFromReleaseTag() || exactGitTag(packageDir())
+    if (source === undefined) return exactGitTag(packageDir())
     verdict = installAllows(source)
     return verdict
   })().finally(() => {

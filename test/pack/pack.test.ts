@@ -274,6 +274,33 @@ describe.each(TESTED_HOSTS)("installed alone, in stock OpenCode %s", (version) =
       await host.close()
     }
   }, 600_000)
+
+  test("an untagged copy in a tag-named directory is not a release", async () => {
+    const dir = join(work, "@v0.0.1")
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "specter-pack-tagname", private: true }))
+    run("npm", ["install", join(work, pack().filename), "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"], dir)
+    const installed = join(dir, "node_modules", ...pkg.name.split("/"))
+    expect(installed).toContain("@v0.0.1")
+    const host = await serve(version, installed, "-tagname")
+    try {
+      await host.until("the plugin finishes loading", async () => {
+        const { data } = await host.api<{ data: { id: string; state: { status: string } }[] }>("GET", "/api/plugin")
+        const found = data.find((item) => item.id === PLUGIN_ID)
+        return found && found.state.status !== "loading" ? found : undefined
+      })
+      const status = await host.until("the gate reports NOT_RELEASED", async () => {
+        const { output } = await host.api<{ output: Record<string, unknown> }>("POST", `/api/rpc/${PLUGIN_ID}/status`, { input: {} })
+        const problems = Array.isArray(output.problems) ? output.problems : []
+        return problems.some((problem) => String(problem).startsWith("NOT_RELEASED")) ? output : undefined
+      })
+      expect(status).not.toHaveProperty("server")
+      const { data: servers } = await host.api<{ data: { name: string }[] }>("GET", "/api/mcp")
+      expect(servers.map((item) => item.name)).not.toContain(SERVER_NAME)
+    } finally {
+      await host.close()
+    }
+  }, 600_000)
 })
 
 describe("a real release install on stock OpenCode 2.3.2", () => {
