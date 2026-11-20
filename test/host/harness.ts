@@ -15,6 +15,7 @@ import { PLUGIN_ID, SERVER_NAME } from "../../src/constants.js"
 import { type FakeOptions, startFakeSpecter } from "./fake-specter.js"
 import { routeFetch } from "./route-fetch.js"
 
+import { simulateTaggedRelease } from "../../src/release.js"
 import { SpecterRpc, type Status } from "../../src/rpc.js"
 
 const REPO = realpathSync(fileURLToPath(new URL("../../", import.meta.url)))
@@ -63,6 +64,9 @@ export interface HostInput {
 let hosts = 0
 
 export async function startHost(input: HostInput = {}) {
+  // This harness loads the package as a local path, which is not a tagged release. Simulate one so the existing
+  // handlers still run against the loopback fake. Production does not set this.
+  simulateTaggedRelease(true)
   const base = join(ROOT, `host-${++hosts}`)
   const work = join(base, "work")
   mkdirSync(work, { recursive: true })

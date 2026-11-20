@@ -13,6 +13,7 @@
 // The key check (key-check.ts) calls the free credit balance; the plugin's four tools (read-tools.ts) and the source
 // (source/saved.ts) call the rest.
 import { API_KEY_HEADER, REST_BASE } from "../constants.js"
+import { isLoopback, vendorCallsAllowed } from "../release.js"
 import { SpecterPluginError } from "../errors.js"
 import { withoutSecret } from "../redact.js"
 import type { ToolClass } from "../specter-tools.js"
@@ -64,6 +65,8 @@ export interface RequestDeps {
   readonly random?: () => number
   /** The REST base; REST_BASE unless a test points at a loopback fake. */
   readonly base?: string
+  /** Tests pass true to simulate a tagged release. A source install must not set this. */
+  readonly released?: boolean
 }
 
 export interface ApiOutput {
@@ -223,6 +226,14 @@ async function send(url: URL, input: RestInput, deps: RequestDeps): Promise<Resp
     }
     const timeout = AbortSignal.timeout(deps.timeoutMs)
     const signal = deps.signal ? AbortSignal.any([deps.signal, timeout]) : timeout
+    // A source install must not call Specter. A test's own fetch, a loopback fake, or a simulated release still runs.
+    if (deps.fetch === fetch && !isLoopback(current) && !(await vendorCallsAllowed({ released: deps.released }))) {
+      throw new SpecterPluginError(
+        "NOT_RELEASED",
+        "This copy is not a released install, so Specter was not called.",
+        "Wait for a release tag. Do not install this repository from source if you need to call Specter.",
+      )
+    }
     let response: Response
     try {
       response = await deps.fetch(current.href, { method: input.method, headers, ...(body !== undefined ? { body } : {}), redirect: "manual", signal })

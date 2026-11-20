@@ -1,17 +1,13 @@
 # Specter for OpenCode
 
 Connects OpenCode to [Specter](https://tryspecter.com)'s deal data, so your agents can find a company and read its
-profile and signals, through Specter's hosted MCP server and, in a later release, the plugin's own tools on your team's
-Specter API key.
+profile and signals, through Specter's hosted MCP server and the plugin's own tools on your team's Specter API key.
 
 Unofficial; not affiliated with Specter.
 
 Specter is a trademark of its owner; this unofficial plugin is not endorsed by them.
 
-> **Not yet released.** This is v0.0.1 before its first release: the plugin registers Specter's hosted MCP server,
-> declares the Specter key sign-in, inserts its default rules and shows its status, and has no tools of its own yet.
-> Its only call to Specter's REST API is the free key check. The tool table fills from a live capture of Specter's
-> server in a later step.
+> Not yet released. The plugin's own tools read companies and saved searches on the team key (`specter_search_companies`, `specter_get_company`, `specter_list_saved_searches`, `specter_saved_search_results`, `specter_events_list` and `specter_probe`); Specter's own MCP tools are not listed here yet.
 
 ## Requirements
 
@@ -20,7 +16,7 @@ Specter is a trademark of its owner; this unofficial plugin is not endorsed by t
   [`allowUntestedHost`](docs/configuration.md#options).
 - macOS or Linux.
 - A Specter seat. Specter's MCP server signs each person in on their own, and is part of Specter's seat plan.
-- For the plugin's own tools, when they arrive: API access for your team. Specter's API needs at least one paid seat,
+- For the plugin's own tools: API access for your team. Specter's API needs at least one paid seat,
   and the team's one API key lives in Specter's [API Console](https://app.tryspecter.com/settings/api-console). With
   no key there yet, choose **Request API Access** in the console; Specter says it reviews requests within one business
   day. API use is metered in credits, priced on request; a trial of 200 free credits can be requested in the same
@@ -30,21 +26,8 @@ Specter is a trademark of its owner; this unofficial plugin is not endorsed by t
 
 ## Install
 
-```sh
-opencode plugin add github:joe-broadhead/opencode-specter#v0.0.1
-```
-
-Run `opencode reload`, or restart OpenCode. Then run `/specter-status` in a session.
-
-Or add the plugin to `opencode.json` instead, with the same spec:
-
-```json
-{ "plugins": [{ "package": "github:joe-broadhead/opencode-specter#v0.0.1" }] }
-```
-
-The install takes the GitHub release tag. Its commit carries the built `dist/`, so the install runs no build. Each
-release has its own tag, and a Git install does not update by itself: to move to a newer release, remove the old entry
-with `opencode plugin remove`, then add the new tag.
+Not released. `package.json` is `0.0.1` and there is no release tag, so there is no install line. A source install
+does not call Specter. When a release exists, its tag is the install spec.
 
 ## Sign in
 
@@ -194,6 +177,7 @@ The plugin's errors start with a code and end with one next step:
 | `SERVER_NOT_REGISTERED` | Status: the `specter` server or its tools could not be registered | Restart OpenCode. |
 | `INTEGRATION_NOT_REGISTERED` | Status: the **Specter** key sign-in could not be added to `/connect` | Restart OpenCode. |
 | `KEY_UNAVAILABLE` | Log warning: OpenCode could not read the key | Run `/connect`, choose **Specter** and paste the key again. |
+| `NOT_RELEASED` | A source install tried to call Specter | Wait for a release tag. Do not install this repository from source if you need to call Specter. |
 | `STATUS_UNAVAILABLE` | Status | Try again in a few seconds; if it persists, restart OpenCode. |
 | `AUTH_REQUIRED` | A tool needs the team key and none is connected | Run `/connect`, choose **Specter** and paste the team API key. |
 | `INPUT_INVALID` | A tool's input does not fit its schema | Fix the input, then call the tool again. |
@@ -215,7 +199,7 @@ A script's errors from the tools RPC have their own codes, listed in [Scripting]
 
 1. Sign out of the `specter` server: `opencode mcp logout specter`, while the plugin is installed.
 2. Remove the key: `opencode auth logout Specter`.
-3. Remove the plugin with `opencode plugin remove github:joe-broadhead/opencode-specter#v0.0.1`, then
+3. Remove the plugin entry from `opencode.json`, then
    `opencode reload`.
 4. The plugin keeps no data of its own. Remove the default rules you copied into agents' own `permissions`.
 

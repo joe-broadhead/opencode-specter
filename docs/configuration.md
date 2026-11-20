@@ -2,12 +2,12 @@
 
 Unofficial plugin. Not affiliated with Specter.
 
-The plugin works without options. Set them on its entry in `opencode.json`:
+The plugin works without options. There is no release tag yet, so this is the options shape, not an install line. Set them on its entry in `opencode.json`:
 
 ```json
 {
   "plugins": [
-    { "package": "github:joe-broadhead/opencode-specter#v0.0.1", "options": { "access": "ask-changes", "requestTimeoutMs": 60000 } }
+    { "package": "github:joe-broadhead/opencode-specter", "options": { "access": "ask-changes", "requestTimeoutMs": 60000 } }
   ]
 }
 ```
@@ -58,6 +58,7 @@ Every code the plugin's own code raises, with when it happens. Each message ends
 | `SERVER_NOT_REGISTERED` | The MCP transform or the tool transform failed. |
 | `INTEGRATION_NOT_REGISTERED` | The key integration's transform failed. |
 | `KEY_UNAVAILABLE` | OpenCode could not read the key; the plugin keeps the last key it read. |
+| `NOT_RELEASED` | A source install tried to call Specter, so nothing was sent. |
 | `STATUS_UNAVAILABLE` | OpenCode did not report the server's state. |
 | `AUTH_REQUIRED` | A tool needs the team key and none is connected. |
 | `INPUT_INVALID` | A tool's input does not fit its schema. |

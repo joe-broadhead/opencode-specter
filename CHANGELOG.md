@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- A source install of this plugin sends nothing to Specter: the plugin registers Specter's MCP server and makes a vendor call only when the host reports this install as a tagged package (`…#vX.Y.Z`), read from `ctx.plugin.list` once its entry exists, or when a checkout is exactly at a release tag. A branch, a dev checkout or an untagged install answers `NOT_RELEASED` and sends nothing.
+
 - The repository scaffold, in the family's layout from opencode-github: the `jelly` declaration, the build to two
   self-contained bundles, the shared kit (r4.1) and `scripts/check.mjs` as the one check gate.
 - Registration of Specter's hosted MCP server as `specter`, adopting a user's own entry at Specter's URL unchanged.

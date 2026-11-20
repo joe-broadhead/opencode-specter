@@ -26,7 +26,7 @@ const OptionsSchema = z.strictObject({
 
 export type Options = z.output<typeof OptionsSchema> & { readonly access: Access }
 
-const EXAMPLE = `"plugins": [{ "package": "github:joe-broadhead/opencode-specter#v0.0.1", "options": { "access": "ask-changes" } }]`
+const EXAMPLE = `"plugins": [{ "package": "github:joe-broadhead/opencode-specter", "options": { "access": "ask-changes" } }]`
 
 export function loadOptions(raw: unknown): Options {
   const result = OptionsSchema.safeParse(raw ?? {})
