@@ -99,6 +99,12 @@ function install(withHostPackages: boolean): string {
   const dir = project(name)
   const hosts = withHostPackages ? HOST_PACKAGES.map((item) => `${item}@${pkg.devDependencies[item]}`) : []
   run("npm", ["install", join(work, pack().filename), ...hosts, "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"], dir)
+  // A release install is a tagged checkout, and that is what a real GitHub install looks like to the plugin: the module
+  // is loaded from a path whose checkout carries the release tag. Tag this temp copy so the installed-alone tests
+  // exercise the released path; a source checkout, which has none, still answers NOT_RELEASED.
+  run("git", ["init", "--quiet"], dir)
+  run("git", ["-c", "user.name=pack test", "-c", "user.email=pack@example.invalid", "commit", "--allow-empty", "-qm", "release install"], dir)
+  run("git", ["tag", `v${pkg.version}`], dir)
   installs.set(name, dir)
   return dir
 }
