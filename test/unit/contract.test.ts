@@ -11,7 +11,7 @@ import { TOOLS_RPC_ID } from "../../src/tools-rpc.js"
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const read = (path: string) => readFileSync(join(root, path), "utf8")
 const NAME = "@we-the-rebel-alliance/source-contract"
-const TAG = "v0.2.0"
+const TAG = "v0.3.0"
 
 describe("the source contract", () => {
   it(`is pinned to ${TAG} everywhere it is named`, () => {

@@ -1,4 +1,4 @@
-// The source contract's conformance kit (v0.2.0) over the one source `package.json` declares, run on the plugin's own
+// The source contract's conformance kit (v0.3.0) over the one source `package.json` declares, run on the plugin's own
 // `events_list`, `probe` and `scope.suggest` against recorded Specter answers (test/fixtures/sources.json, all invented):
 // no Specter call, no key. Every read asserts its action and its provider operation on the kit's recording permission,
 // exactly as the host and the tools RPC judge them, so the kit sees what a real read asserts.
@@ -125,7 +125,7 @@ describe("the source contract's conformance kit", () => {
   test("writes the report a release attaches", () => {
     const installed = readInstalledDescriptor(root, { version: pkg.version })
     const report = {
-      contract: "@we-the-rebel-alliance/source-contract@0.2.0",
+      contract: "@we-the-rebel-alliance/source-contract@0.3.0",
       plugin: pkg.name,
       version: pkg.version,
       descriptorHash: installed.ok ? installed.value.hash : null,
@@ -148,13 +148,13 @@ describe("the source contract's conformance kit", () => {
       maxBytes: 65_536,
       scope: { keys: ["search"], suggest: { tool: "list_saved_searches", operations: ["searches.list"] } },
       permission: { events: "specter_events_list", operations: ["searches.companies.results"] },
-      // Specter bills in credits from the team's plan and publishes no price per credit; v0.2.0 requires a metered
+      // Specter bills in credits from the team's plan and publishes no price per credit; v0.3.0 requires a metered
       // source to state a `usd` figure, so the declaration carries the plugin's estimate — rounded up from comparable
       // company-data APIs, and replaced by a team's contract rate. Never zero, and no `conditions` (v0.1.x refuses it).
       cost: { class: "metered", units: [{ per: "company", usd: CREDIT_ESTIMATE_USD }] },
     })
     // A consumer on v0.1.x refuses `permission.identity: []` ("expected array to have >=1 items"), so it is omitted:
-    // v0.2.0 reads an absent `identity` as undeclared, and the probe asserts its action alone.
+    // v0.3.0 reads an absent `identity` as undeclared, and the probe asserts its action alone.
     expect(source.permission).not.toHaveProperty("identity")
   })
 
