@@ -37,9 +37,10 @@ const stages = {
   // The source contract's conformance kit over the declared source: it runs the plugin's own events_list, probe and
   // scope.suggest against recorded Specter answers and writes reports/conformance-report.json, which must say ok: true.
   conformance: () => run("bun", ["test", "./test/conformance"]),
-  // No release-kit stage in 4a: the copied kit (pinned for phase 4b to replace with plugin-kit) asserts the retired
-  // multi-runner CI matrix, while this phase's CI is one job on the required runner rule. The copies stage still
-  // verifies the pinned files byte for byte.
+  // The copied release kit's own tests, including the imported check-drift suites. Two suites are skipped: the
+  // "CI: macOS on pushes" self-test, whose pinned fixture asserts the retired multi-runner matrix, and its nested
+  // environment re-run, "the kit tests, whatever". 4b replaces the kit with plugin-kit. Do not edit the pinned test.
+  kit: () => run("node", ["--test", "--test-skip-pattern", "^CI: macOS on pushes|^the kit tests, whatever", "scripts/release-kit.test.mjs"], { env: { KIT_TESTS_NESTED: "1" } }),
   build: () => run("node", ["scripts/build.mjs"]),
   icons: () => run("node", ["scripts/check-icons.mjs"]),
   host: host,
