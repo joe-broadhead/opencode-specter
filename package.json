@@ -43,7 +43,6 @@
     "build": "node scripts/check.mjs build",
     "test": "node scripts/check.mjs unit",
     "conformance": "node scripts/check.mjs conformance",
-    "test:kit": "node scripts/check.mjs kit",
     "test:host": "node scripts/check.mjs host",
     "test:pack": "node scripts/check.mjs pack",
     "lint": "node scripts/check-forbidden.mjs --self-test && node scripts/check.mjs forbidden copies",

@@ -92,13 +92,13 @@ function host() {
 
 /**
  * The workflows are parsed as workflows, not as YAML: `actionlint` catches a `${{ }}` that only exists in some
- * contexts, which makes GitHub reject the whole file and run nothing. CI runs it in its own job; here it runs when the
- * tool is on PATH.
+ * contexts, which makes GitHub reject the whole file and run nothing. This is a local courtesy only: CI does not
+ * install actionlint, so the stage passes when the tool is absent.
  */
 function actionlint() {
   const probe = spawnSync("actionlint", ["-version"], { encoding: "utf8" })
   if (probe.error?.code === "ENOENT") {
-    console.log("actionlint is not on PATH, so the workflow check is skipped here; CI runs it in its own job.")
+    console.log("actionlint is not on PATH, so the workflow check was skipped; CI does not install it.")
     return 0
   }
   return run("actionlint", ["-color"])
