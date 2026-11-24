@@ -11,11 +11,13 @@ describe("skills", () => {
   })
 
   for (const id of SKILL_IDS) {
-    it(`${id} has exactly a name and a one-line description, and opens with the family's /connect line`, () => {
+    it(`${id} has exactly a name and a one-line description within the 300-character budget`, () => {
       const skill = parseSkill(id, text(id))
       expect(skill.name).toBe(id)
       expect(skill.description.length).toBeGreaterThan(40)
-      expect(skill.content.split("\n")[0]).toMatch(/^If Specter's tools are absent, run `\/connect` .*, or on Jelly call jelly_connection_request\.$/)
+      expect(skill.description.length).toBeLessThanOrEqual(300)
+      expect(skill.content.split("\n")[0]).toMatch(/^If Specter's tools are absent, run `\/connect` .*\.$/)
+      expect(skill.content).not.toMatch(/jelly/i)
     })
 
     it(`names only tools this plugin has`, () => {

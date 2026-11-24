@@ -1,7 +1,7 @@
 /**
  * Vendor calls run only from a tagged release install. A source install (no release tag on the checkout, and none
  * in the loaded module's URL) must not call Specter. Tests pass `released: true`, or `simulateTaggedRelease`, to
- * keep the handlers. There is no tag to invent: package.json stays 0.0.1 until a release exists.
+ * keep the handlers. There is no tag to invent: package.json stays 0.0.0 until a release exists.
  */
 import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url"
 
 const RELEASE_TAG = /(?:^|[#/@])v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?=$|[#/@])/
 const SEMVER_TAG = /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/
-const FLAG = Symbol.for("@joe-broadhead/opencode-specter/tagged-release")
+const FLAG = Symbol.for("@we-the-rebel-alliance/specter-plugin/tagged-release")
 /** One install's source, as `ctx.plugin.list` reports it. */
 export interface InstallSource {
   readonly type?: string
@@ -46,9 +46,9 @@ export function isLoopback(url: URL): boolean {
 
 /** True only for a real semver tag on this install, or a test that simulated one. */
 /** This plugin's own repository and package: a release install comes from it, and no other one is a release here. */
-const OWNER = "joe-broadhead"
-const REPO = "opencode-specter"
-const PACKAGE = "@joe-broadhead/opencode-specter"
+const OWNER = "we-the-rebel-alliance"
+const REPO = "specter-plugin"
+const PACKAGE = "@we-the-rebel-alliance/specter-plugin"
 
 export function installAllows(source?: InstallSource): boolean {
   if (simulated()) return true

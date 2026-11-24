@@ -1,7 +1,7 @@
 // The one local entry point: `npm run check` runs every stage in order and stops at the first failure.
 // `node scripts/check.mjs <stage>...` runs only the named stages, in the order given.
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { delimiter, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -25,8 +25,8 @@ const EXPORTS = {
 // dist/ holds one self-contained bundle per entry, and nothing else (scripts/build.mjs).
 const DIST = ["index.js", "tui.js"]
 // The tested OpenCode line. The host provides @opencode/plugin, OpenTUI and Solid, so the package declares no peers.
-const HOST_RANGE = ">=2.2.3 <2.4.0"
-const HOST_DEV_PIN = "2.2.3"
+const HOST_RANGE = ">=2.4.1 <2.5.0"
+const HOST_DEV_PIN = "2.4.1"
 const ABSENT_FIELDS = ["dependencies", "optionalDependencies", "bundleDependencies", "bundledDependencies", "peerDependencies", "peerDependenciesMeta", "engines", "overrides"]
 const LIFECYCLE_SCRIPTS = ["preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", "prepublish", "prepublishOnly", "prepack", "postpack", "publish", "postpublish"]
 
@@ -37,7 +37,10 @@ const stages = {
   // The source contract's conformance kit over the declared source: it runs the plugin's own events_list, probe and
   // scope.suggest against recorded Specter answers and writes reports/conformance-report.json, which must say ok: true.
   conformance: () => run("bun", ["test", "./test/conformance"]),
-  kit: () => run("node", ["--test", "scripts/release-kit.test.mjs"]),
+  // The copied release kit's own tests, including the imported check-drift suites. Two suites are skipped: the
+  // "CI: macOS on pushes" self-test, whose pinned fixture asserts the retired multi-runner matrix, and its nested
+  // environment re-run, "the kit tests, whatever". 4b replaces the kit with plugin-kit. Do not edit the pinned test.
+  kit: () => run("node", ["--test", "--test-skip-pattern", "^CI: macOS on pushes|^the kit tests, whatever", "scripts/release-kit.test.mjs"], { env: { KIT_TESTS_NESTED: "1" } }),
   build: () => run("node", ["scripts/build.mjs"]),
   icons: () => run("node", ["scripts/check-icons.mjs"]),
   host: host,
@@ -76,41 +79,27 @@ function run(command, args, options = {}) {
 }
 
 /**
- * The host suite on each tested release: the locked @opencode/sdk for HOST_DEV_PIN, and the others installed from npm
- * into a temp folder under the system's /tmp, outside the lockfile, once per run. HOST_SDK_DIR runs only that SDK.
+ * The host suite on the one tested release, the locked @opencode/sdk for HOST_DEV_PIN. The single entry in
+ * TESTED_HOSTS must be that pin: there is no matrix and no second SDK install.
  */
 function host() {
-  if (process.env.HOST_SDK_DIR) return run("bun", ["test", "./test/host"])
-  for (const version of TESTED_HOSTS) {
-    console.log(`\n[check] host on @opencode/sdk ${version}`)
-    if (version === HOST_DEV_PIN) {
-      const code = run("bun", ["test", "./test/host"])
-      if (code !== 0) return code
-      continue
-    }
-    const dir = mkdtempSync(join(realpathSync("/tmp"), `specter-sdk-${version}-`))
-    try {
-      // Its own package.json, so npm never walks up to another one.
-      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "specter-host-sdk", private: true }))
-      const code = run("npm", ["install", `@opencode/sdk@${version}`, "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"], { cwd: dir })
-        || run("bun", ["test", "./test/host"], { env: { HOST_SDK_DIR: dir } })
-      if (code !== 0) return code
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+  if (TESTED_HOSTS.length !== 1 || TESTED_HOSTS[0] !== HOST_DEV_PIN) {
+    console.error(`[check] TESTED_HOSTS must be exactly ["${HOST_DEV_PIN}"], found ${JSON.stringify(TESTED_HOSTS)}.`)
+    return 1
   }
-  return 0
+  console.log(`\n[check] host on @opencode/sdk ${HOST_DEV_PIN}`)
+  return run("bun", ["test", "./test/host"])
 }
 
 /**
  * The workflows are parsed as workflows, not as YAML: `actionlint` catches a `${{ }}` that only exists in some
- * contexts, which makes GitHub reject the whole file and run nothing. CI runs it in its own job; here it runs when the
- * tool is on PATH.
+ * contexts, which makes GitHub reject the whole file and run nothing. This is a local courtesy only: CI does not
+ * install actionlint, so the stage passes when the tool is absent.
  */
 function actionlint() {
   const probe = spawnSync("actionlint", ["-version"], { encoding: "utf8" })
   if (probe.error?.code === "ENOENT") {
-    console.log("actionlint is not on PATH, so the workflow check is skipped here; CI runs it in its own job.")
+    console.log("actionlint is not on PATH, so the workflow check was skipped; CI does not install it.")
     return 0
   }
   return run("actionlint", ["-color"])

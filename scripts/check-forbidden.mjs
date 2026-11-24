@@ -1,5 +1,5 @@
 // Fails when source, tests, scripts or the built dist/ use an API that public OpenCode
-// 2.2.3 deprecates, marks experimental or does not support, or contain a machine-local
+// 2.4.1 deprecates, marks experimental or does not support, or contain a machine-local
 // path. `--self-test` proves that every rule fires on a bad fixture and that a clean
 // fixture passes; `npm run lint` runs it first.
 //
@@ -26,7 +26,7 @@ const RULES = [
   { name: "V1 plugin package", scope: "all", pattern: /@opencode-ai\//, sample: 'import { tool } from "@opencode-ai/plugin"' },
   { name: "ctx.generate (deprecated)", scope: "all", pattern: /ctx\.generate\./, sample: "await ctx.generate.text(input)" },
   { name: "experimental.policies (deprecated)", scope: "all", pattern: /experimental\.policies/, sample: "config.experimental.policies" },
-  { name: "ctx.experimental.artifact (experimental, new in 2.2.4)", scope: "all", pattern: /experimental\.artifact\b/, sample: "await ctx.experimental.artifact.create(input)" },
+  { name: "ctx.experimental.artifact (experimental)", scope: "all", pattern: /experimental\.artifact\b/, sample: "await ctx.experimental.artifact.create(input)" },
   { name: "@opencode/ai import (breaks between patches)", scope: "all", pattern: /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\(\s*)["']@opencode\/ai(?:\/[^"']*)?["']/, sample: 'import { Provider } from "@opencode/ai/provider"' },
   { name: "private OpenCode source import", scope: "all", pattern: /packages\/(core|plugin|schema|sdk|server|tui)\/src/, sample: ["import x from \"../opencode/packages", "core", "src/index.ts\""].join("/") },
   { name: "machine-local path", scope: "all", pattern: /\/Users\//, sample: ["const home = \"", "Users", "someone\""].join("/") },
@@ -157,7 +157,7 @@ function main() {
   const hits = scan(root)
   for (const hit of hits) console.error(`${hit.file}:${hit.line}: ${hit.rule}: ${hit.text}`)
   if (hits.length > 0) {
-    console.error(`check-forbidden: ${hits.length} forbidden use(s). Use the public OpenCode 2.2.3 API instead, and keep machine-local paths out of the repo.`)
+    console.error(`check-forbidden: ${hits.length} forbidden use(s). Use the public OpenCode 2.4.1 API instead, and keep machine-local paths out of the repo.`)
     return 1
   }
   console.log("check-forbidden: OK")

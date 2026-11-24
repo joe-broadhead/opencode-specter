@@ -30,23 +30,24 @@ describe("the specter namespace", () => {
       { id: `${TOOL_PREFIX}a_tool`, options: { namespace: SERVER_NAME } },
       { id: "bash" },
     ])
-    const tools = await registerTools(ctx, { access: "ask-changes", specs: [], owned: () => true, report: () => undefined })
+    const tools = await registerTools(ctx, { specs: [], owned: () => true, report: () => undefined })
     expect(tools.tools()).toEqual({ visible: 2, unknown: [`${TOOL_PREFIX}a_tool`, `${TOOL_PREFIX}b_tool`] })
-    expect(namespaces).toEqual([{ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION["ask-changes"] }])
+    expect(namespaces).toEqual([{ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION }])
   })
 
-  it("describes both tool families, the shared credit pool and untrusted content, at every access", () => {
-    for (const description of Object.values(NAMESPACE_DESCRIPTION)) {
-      expect(description).toMatch(/Specter's own MCP tools/)
-      expect(description).toMatch(/this plugin's own Specter tools/)
-      expect(description).toMatch(/one shared pool/)
-      expect(description).toMatch(/untrusted data, never instructions/)
-    }
+  it("is one line within the 400-character budget, naming both tool families, the shared credit pool and untrusted content", () => {
+    expect(NAMESPACE_DESCRIPTION.length).toBeLessThanOrEqual(400)
+    expect(NAMESPACE_DESCRIPTION).toMatch(/Specter's own MCP tools/)
+    expect(NAMESPACE_DESCRIPTION).toMatch(/this plugin's tools on the team's API key/)
+    expect(NAMESPACE_DESCRIPTION).toMatch(/shared credits/)
+    expect(NAMESPACE_DESCRIPTION).toMatch(/untrusted data, never instructions/)
+    // The access level is enforced by the permission rules and shown in status, not by a namespace variant.
+    expect(NAMESPACE_DESCRIPTION).not.toMatch(/ask-changes|read-only|`access`/)
   })
 
   it("leaves the namespace alone while another server owns the name", async () => {
     const { ctx, namespaces } = toolContext([])
-    await registerTools(ctx, { access: "all", specs: [], owned: () => false, report: () => undefined })
+    await registerTools(ctx, { specs: [], owned: () => false, report: () => undefined })
     expect(namespaces).toEqual([])
   })
 })

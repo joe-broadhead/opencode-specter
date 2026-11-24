@@ -16,7 +16,6 @@
 export const SPECTER_MCP_ORIGIN = "https://mcp.tryspecter.com"
 /** The one scope Specter's challenge and metadata name. */
 export const SCOPES = ["openid"] as const
-
 /** Invented tools, standing in for Specter's until the capture: names no Specter server is known to serve. */
 export const FAKE_TOOLS = [
   { name: "fake_read_tool", description: "An invented read", annotations: { readOnlyHint: true }, inputSchema: { type: "object", properties: {} } },
@@ -139,6 +138,11 @@ export function startFakeSpecter(options: FakeOptions = {}): FakeSpecter {
   const answer = (message: Message) => {
     const reply = (result: unknown) => ({ jsonrpc: "2.0", id: message.id, result })
     switch (message.method) {
+      // OpenCode 2.4.1 probes this first when the server declares no protocol. An unauthenticated probe still gets the
+      // 401 above and ends that attempt; once signed in, this error sends the client down the legacy `initialize` path,
+      // as a server that predates the modern revision answers.
+      case "server/discover":
+        return { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: `Method not found: ${message.method}` } }
       case "initialize":
         return reply({ protocolVersion: message.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "fake-specter", version: "0.0.0" } })
       case "tools/list":

@@ -75,7 +75,7 @@ describe("the team key", () => {
     }
     const status = await computeStatus(ctx as never, {
       access: "all",
-      hostVersion: "2.2.3",
+      hostVersion: "2.4.1",
       source: () => ({ type: "plugin", url: "https://mcp.example.invalid/mcp" }),
       tools: () => ({ visible: 0, unknown: [] }),
       key: read,
@@ -101,7 +101,7 @@ describe("the team key", () => {
     const asked: string[] = []
     const status = await computeStatus(ctx as never, {
       access: "all",
-      hostVersion: "2.2.3",
+      hostVersion: "2.4.1",
       source: () => ({ type: "plugin", url: "https://mcp.example.invalid/mcp" }),
       tools: () => ({ visible: 0, unknown: [] }),
       key: read,

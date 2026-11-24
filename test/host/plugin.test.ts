@@ -147,8 +147,7 @@ describe("the plugin in a host", () => {
       }, 60_000)
       // Both invented tools are unclassified, so the default rules treat them like changes.
       expect(signedIn.tools.unknown).toEqual(["specter_fake_other_tool", "specter_fake_read_tool"])
-      // OpenCode found the sign-in from Specter's challenge and the two metadata documents (2.3.0 reads them only when
-      // the sign-in starts, earlier releases already when the server first asks for one).
+      // OpenCode found the sign-in from Specter's challenge and the two metadata documents.
       expect(host.fake.discovery).toContain("/.well-known/oauth-protected-resource/mcp")
       expect(host.fake.discovery).toContain("/.well-known/oauth-authorization-server")
       // A registration route Specter advertises, PKCE S256 and the documented scope; the code exchanged with a verifier.
@@ -160,6 +159,15 @@ describe("the plugin in a host", () => {
       expect(signIn!.scope).toBe("openid")
       expect(signIn!.resource).toBe(PROTECTED_RESOURCE.resource)
       expect(host.fake.tokens[0]).toMatchObject({ grant: "authorization_code", verifier: true })
+      // OpenCode 2.4.1 probes `server/discover` first when the server declares no protocol. Those attempts carry no
+      // token (the 401 challenge is what starts the sign-in above), and the signed-in connection then falls back to
+      // `initialize` because the fake, like an ordinary server, does not serve the modern revision.
+      const rpcs = host.fake.requests.flatMap((request) => (request.rpc === undefined ? [] : [request.rpc]))
+      const unauthenticated = host.fake.requests.flatMap((request) => (request.rpc === undefined || request.bearer ? [] : [request.rpc]))
+      expect(rpcs[0]).toBe("server/discover")
+      expect(unauthenticated).toContain("server/discover")
+      expect(unauthenticated.filter((rpc) => rpc !== "server/discover" && rpc !== "initialize")).toEqual([])
+      expect(rpcs).toContain("initialize")
       // The MCP sign-in never touches the REST API or the team key.
       expect(host.fake.requests.filter((request) => request.path.startsWith("/api/") || request.apiKey)).toEqual([])
     } finally {
@@ -203,7 +211,7 @@ describe("the plugin in a host", () => {
       const output = page.ok ? (page.value.output as { events: { external_id: string; occurred_at: string }[]; cursor: string; plugin: string; scope: Record<string, string> }) : undefined
       expect(output?.events.map((event) => event.external_id)).toEqual(["company:hedgehog"])
       expect(output?.cursor).toEqual(expect.any(String))
-      expect(output?.plugin).toBe("@joe-broadhead/opencode-specter")
+      expect(output?.plugin).toBe("@we-the-rebel-alliance/specter-plugin")
       expect(output?.scope).toEqual({ search: "5432" })
       // Every REST call carried the key in X-API-Key and nothing else, and only the documented paths were asked.
       const rest = host.fake.requests.filter((request) => request.path.startsWith("/api/"))
@@ -251,7 +259,7 @@ describe("the plugin in a host", () => {
     } finally {
       await typo.close()
     }
-    const old = await startHost({ version: "2.1.0" })
+    const old = await startHost({ version: "2.5.0" })
     try {
       expect(await pluginState(old)).toMatchObject({ status: "failed", error: expect.stringContaining("HOST_UNTESTED") })
     } finally {

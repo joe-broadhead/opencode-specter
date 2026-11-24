@@ -1,9 +1,9 @@
 ---
 name: specter
-description: Read before the first Specter tool call (specter_*, tools.specter.*). For Specter (tryspecter.com) deal data - resolving a company, reading its profile, a saved search's matches and the specter.saved feed - and for checking whether Specter is set up. Not for Affinity CRM records or another vendor called Spectre.
+description: Specter (tryspecter.com) deal data: resolve a company, read its profile, a saved search's matches and the specter.saved feed, and check setup. Not for Affinity CRM records.
 ---
 
-If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key), or on Jelly call jelly_connection_request.
+If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key).
 
 # Specter
 
@@ -19,8 +19,8 @@ one. The plugin's own tools are these, and each names what it costs:
 | `specter_events_list` | For Memory's collector and scripts, not for answering questions: a saved company search's net-new companies as source-contract events, with a cursor. | Credits: 1 per company |
 | `specter_probe` | For a consumer binding `specter.saved`: the organisation the team key belongs to. | Free |
 
-Specter publishes no price per credit, so the plugin never states one: it reports what a call spent in credits, and
-nothing in dollars.
+Specter publishes no price per credit. The plugin reports what a call spent in credits; the `specter.saved` source's
+declaration carries only an estimate for a consumer's budget, never a Specter price.
 
 ## Rules
 

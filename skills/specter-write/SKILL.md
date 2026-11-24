@@ -3,7 +3,7 @@ name: specter-write
 description: Read before any Specter call that spends credits or changes Specter data - enriching a company, a saved search's results, the specter.saved feed, creating or updating a Specter list or adding companies to one. Covers asking first, one change at a time, and reporting what was spent.
 ---
 
-If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key), or on Jelly call jelly_connection_request.
+If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key).
 
 # Spending credits and changing Specter
 

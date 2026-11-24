@@ -3,10 +3,16 @@
 import { SUPPORTED_HOST, TESTED_HOSTS } from "./constants.js"
 import { SpecterPluginError } from "./errors.js"
 
-const LOWEST: Version = [2, 2, 3]
-const ABOVE: Version = [2, 4, 0]
-
 type Version = readonly [number, number, number]
+
+/**
+ * The range's two bounds, parsed from `SUPPORTED_HOST` so the code and `package.json` cannot drift. The constant is
+ * `>=<lowest> <<above>`: the lowest release starts the plugin, and the first release of the next line ends it.
+ */
+const BOUNDS = /^>=(\d+)\.(\d+)\.(\d+) <(\d+)\.(\d+)\.(\d+)$/.exec(SUPPORTED_HOST)
+if (BOUNDS === null) throw new Error(`SUPPORTED_HOST is not a supported range: ${SUPPORTED_HOST}`)
+const LOWEST: Version = [Number(BOUNDS[1]), Number(BOUNDS[2]), Number(BOUNDS[3])]
+const ABOVE: Version = [Number(BOUNDS[4]), Number(BOUNDS[5]), Number(BOUNDS[6])]
 
 /**
  * Refuses an OpenCode release outside the supported range, unless `allowUntested` is set; then it returns a warning

@@ -2,14 +2,14 @@
 
 Unofficial plugin. Not affiliated with Specter.
 
-A script can call Specter's tools with no model: a cron job, a shell script, or any program that can reach the OpenCode
+A script can call Specter's tools with no model: an OpenCode automation, a shell script, or any program that can reach the OpenCode
 server. It uses the tools RPC, `specter.deals.tools`, through `opencode api` or an OpenCode client:
 
 ```sh
 opencode api post /api/rpc/specter.deals.tools/<method> -H "x-opencode-directory:$PWD" -d '{"input":{"sessionID":"<id>","input":{…}}}'
 ```
 
-The transport is the source contract's (`@we-the-rebel-alliance/source-contract`, tag v0.3.0), shared by the family.
+The transport is the source contract's (`@we-the-rebel-alliance/source-contract` 0.3.0), shared by the family.
 
 | Method | Class | The tool |
 | --- | --- | --- |

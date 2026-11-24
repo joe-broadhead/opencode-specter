@@ -2,12 +2,12 @@
 
 Unofficial plugin. Not affiliated with Specter.
 
-The plugin works without options. There is no release tag yet, so this is the options shape, not an install line. Set them on its entry in `opencode.json`:
+The plugin works without options. The `v0.0.0` tag is not cut yet; until then this is the entry shape, not a live install line. Set options on its entry in `opencode.json`:
 
 ```json
 {
   "plugins": [
-    { "package": "github:joe-broadhead/opencode-specter", "options": { "access": "ask-changes", "requestTimeoutMs": 60000 } }
+    { "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0", "options": { "access": "ask-changes", "requestTimeoutMs": 60000 } }
   ]
 }
 ```
@@ -21,11 +21,11 @@ option, so a typo cannot leave the plugin more open than you meant.
 | --- | --- | --- | --- |
 | `access` | `"all"`, `"ask-changes"` or `"read-only"` | `"all"` | What the default rules allow. See [Permissions](#permissions). |
 | `requestTimeoutMs` | integer, 5000 to 120000 | `30000` | The time limit for one request to Specter's REST API, in milliseconds. A read that times out is retried; a call that may spend credits is not. |
-| `allowUntestedHost` | boolean | `false` | Load on an OpenCode release outside `>=2.2.3 <2.4.0`, with a warning in status. |
+| `allowUntestedHost` | boolean | `false` | Load on an OpenCode release outside `>=2.4.1 <2.5.0`, with a warning in status. |
 
 **`requestTimeoutMs` is a proposal.** Its shape (an integer with bounds) follows the family's `executionTimeoutMs` in
 opencode-tavily, but the numbers, a 30-second default between 5 seconds and 2 minutes, are not a Specter fact: they
-await sign-off, and may change once real calls are measured. The `jelly` declaration carries the same three numbers.
+await sign-off, and may change once real calls are measured.
 
 The time limit applies to the plugin's own REST requests only. Specter's MCP server runs with OpenCode's own defaults.
 
@@ -51,7 +51,7 @@ Every code the plugin's own code raises, with when it happens. Each message ends
 
 | Code | When |
 | --- | --- |
-| `HOST_UNTESTED` | OpenCode is outside `>=2.2.3 <2.4.0` and `allowUntestedHost` is not set. |
+| `HOST_UNTESTED` | OpenCode is outside `>=2.4.1 <2.5.0` and `allowUntestedHost` is not set. |
 | `OPTIONS_INVALID` | An option is unknown or has a wrong value. |
 | `SKILLS_INVALID` | A skill file the plugin ships is missing or malformed. |
 | `RULES_NOT_ADDED` | The agent transform failed, so the default rules are missing. |

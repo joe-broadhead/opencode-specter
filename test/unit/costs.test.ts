@@ -47,7 +47,7 @@ describe("costs", () => {
 
   it("status says how MCP calls use credits, and that it is unconfirmed", () => {
     expect(MCP_CREDIT_USE).toMatch(/not yet confirmed live/)
-    const status = { version: "0", state: "connected", key: { connected: false, check: "unchecked" }, access: "all", tools: { visible: 0, unknown: [] }, unguardedAgents: [], host: { version: "2.2.3", range: "", tested: true }, nextStep: "" } as const
+    const status = { version: "0", state: "connected", key: { connected: false, check: "unchecked" }, access: "all", tools: { visible: 0, unknown: [] }, unguardedAgents: [], host: { version: "2.4.1", range: "", tested: true }, nextStep: "" } as const
     expect(statusRows(status).find((row) => row.label === "MCP credit use")?.value).toBe(MCP_CREDIT_USE)
   })
 

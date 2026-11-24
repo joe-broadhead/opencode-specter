@@ -11,17 +11,23 @@ import { TOOLS_RPC_ID } from "../../src/tools-rpc.js"
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const read = (path: string) => readFileSync(join(root, path), "utf8")
 const NAME = "@we-the-rebel-alliance/source-contract"
-const TAG = "v0.3.0"
+// The tag v0.3.0 was deleted when the repository became plugin-contract; the same commit is still served, so the dev
+// pin names the commit. 4b replaces this dependency with plugin-contract v0.0.0.
+const COMMIT = "2fd55cdc0c6c1067927fefc403a88bfd18c9a971"
+const VERSION = "0.3.0"
 
 describe("the source contract", () => {
-  it(`is pinned to ${TAG} everywhere it is named`, () => {
+  it(`is pinned to ${VERSION} (${COMMIT}) everywhere it is named`, () => {
     const pkg = JSON.parse(read("package.json")) as { devDependencies: Record<string, string> }
-    expect(pkg.devDependencies[NAME]).toBe(`github:we-the-rebel-alliance/source-contract#${TAG}`)
-    const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { version?: string }> }
-    expect(lock.packages[`node_modules/${NAME}`]?.version).toBe(TAG.slice(1))
-    expect(read("NOTICE")).toContain(`## ${NAME} ${TAG.slice(1)} (MIT)`)
-    expect(read("docs/scripting.md")).toContain(`tag ${TAG}`)
-    expect(read("src/tools-rpc.ts")).toContain(`tag ${TAG}`)
+    expect(pkg.devDependencies[NAME]).toBe(`github:we-the-rebel-alliance/source-contract#${COMMIT}`)
+    const lock = JSON.parse(read("package-lock.json")) as { packages: Record<string, { version?: string; resolved?: string }> }
+    expect(lock.packages[`node_modules/${NAME}`]?.version).toBe(VERSION)
+    expect(lock.packages[`node_modules/${NAME}`]?.resolved).toContain(COMMIT)
+    expect(read("NOTICE")).toContain(`## ${NAME} ${VERSION} (MIT)`)
+    const scripting = read("docs/scripting.md")
+    expect(scripting).toContain(NAME)
+    expect(scripting).toContain(VERSION)
+    expect(read("src/tools-rpc.ts")).toContain(`version ${VERSION}`)
   })
 
   it("still exports the tools RPC entry points the plugin imports", () => {

@@ -41,7 +41,7 @@ Specter's URL it is adopted unchanged; anywhere else it is a conflict, left alon
 
 ## The team key
 
-The plugin declares its own `specter` integration with one `key` method, as OpenCode 2.2.3's built-in Tavily plugin
+The plugin declares its own `specter` integration with one `key` method, as OpenCode 2.4.1's built-in Tavily plugin
 declares Tavily's, and deliberately no `env` method. At call time it reads `connection.active("specter")`, then
 `connection.resolve(connection)`, and uses the value only when its `type` is `"key"`. The key is sent only to Specter's
 REST origin, under its base path, in `X-API-Key`.
