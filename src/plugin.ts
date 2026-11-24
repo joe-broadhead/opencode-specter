@@ -140,7 +140,7 @@ export function createSpecterPlugin(seam: SpecterSeam) {
           permission: ctx.permission,
         }
         // The namespace and the server's tool count; the MCP registration comes next, so ownership is read lazily.
-        const tools = keep(await registerTools(ctx, { access: options.access, specs, owned, report: report("tools") }))
+        const tools = keep(await registerTools(ctx, { specs, owned, report: report("tools") }))
         keep(await registerSource(ctx, sourceDeps))
         // Registering the MCP server is a setup-time decision, but the answer is not available during setup: the host
         // adds the plugin's own entry to `ctx.plugin.list` only after setup returns. So watch for it, then register;

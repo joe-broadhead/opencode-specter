@@ -41,7 +41,7 @@ export async function checkKey(key: string, fetcher: typeof fetch = fetch, base:
     if (fetcher === fetch && !isLoopback(target) && !(await vendorCallsAllowed({ released }))) return "unchecked"
     const response = await fetcher(`${base.replace(/\/$/, "")}${KEY_CHECK_PATH}`, {
       method: "GET",
-      headers: { Accept: "application/json", "User-Agent": "opencode-specter", [API_KEY_HEADER]: key },
+      headers: { Accept: "application/json", "User-Agent": "specter-plugin", [API_KEY_HEADER]: key },
       redirect: "manual",
       signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS),
     })

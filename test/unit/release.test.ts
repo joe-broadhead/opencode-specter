@@ -9,31 +9,31 @@ import { request } from "../../src/api/request.js"
 import { checkKey } from "../../src/key-check.js"
 import { configureReleaseGate, exactGitTag, installAllows, isLoopback, releaseTagIn, simulateTaggedRelease, vendorCallsAllowed, type InstallSource } from "../../src/release.js"
 
-// The host's own report, as stock OpenCode 2.3.2 sends it: the tag is in the spec, and `version` is the resolved commit.
+// The host's own report, as stock OpenCode 2.4.1 sends it: the tag is in the spec, and `version` is the resolved commit.
 const SHA = "8fa625bce989ff7c47a586eaa39340374ba43434"
-const packageSource = (ref: string): InstallSource => ({ type: "package", target: `git+file:///cache/opencode-specter#${ref}`, version: SHA })
+const packageSource = (ref: string): InstallSource => ({ type: "package", target: `git+file:///cache/specter-plugin#${ref}`, version: SHA })
 const listOf = (...items: { id: string; source: InstallSource }[]) => async () => ({ location: { directory: "/p" }, data: items })
 
 describe("a source install does not call Specter", () => {
   it("reads the tag from a package install's spec, not its commit version", () => {
-    expect(installAllows(packageSource("v0.1.0"))).toBe(true)
-    expect(installAllows(packageSource("v0.1.0-rc.1"))).toBe(true)
+    expect(installAllows(packageSource("v0.0.0"))).toBe(true)
+    expect(installAllows(packageSource("v0.0.0-rc.1"))).toBe(true)
     expect(installAllows(packageSource("main"))).toBe(false)
     // The spec must name this plugin's own repository, in the forms a real install records.
-    expect(installAllows({ type: "package", target: "github:joe-broadhead/opencode-specter#v0.1.0", version: SHA })).toBe(true)
-    expect(installAllows({ type: "package", target: "git+https://github.com/joe-broadhead/opencode-specter.git#v0.1.0", version: SHA })).toBe(true)
-    expect(installAllows({ type: "package", target: "git+ssh://git@github.com/joe-broadhead/opencode-specter.git#v0.1.0", version: SHA })).toBe(true)
+    expect(installAllows({ type: "package", target: "github:we-the-rebel-alliance/specter-plugin#v0.0.0", version: SHA })).toBe(true)
+    expect(installAllows({ type: "package", target: "git+https://github.com/we-the-rebel-alliance/specter-plugin.git#v0.0.0", version: SHA })).toBe(true)
+    expect(installAllows({ type: "package", target: "git+ssh://git@github.com/we-the-rebel-alliance/specter-plugin.git#v0.0.0", version: SHA })).toBe(true)
     // Another repository's semver tag is not a release of this plugin.
-    expect(installAllows({ type: "package", target: "github:joe-broadhead/opencode-gws#v0.0.11", version: SHA })).toBe(false)
-    expect(installAllows({ type: "package", target: "github:someone/opencode-specter#v0.1.0", version: SHA })).toBe(false)
+    expect(installAllows({ type: "package", target: "github:we-the-rebel-alliance/gws-plugin#v0.0.11", version: SHA })).toBe(false)
+    expect(installAllows({ type: "package", target: "github:someone/specter-plugin#v0.0.0", version: SHA })).toBe(false)
     // A folder named after a tag, around a copy with no git tag, is not a release.
-    expect(installAllows({ type: "local", path: "/tmp/@v0.1.0/opencode-specter" })).toBe(false)
-    expect(installAllows({ type: "package", target: "github:joe-broadhead/opencode-specter" })).toBe(false)
+    expect(installAllows({ type: "local", path: "/tmp/@v0.0.0/specter-plugin" })).toBe(false)
+    expect(installAllows({ type: "package", target: "github:we-the-rebel-alliance/specter-plugin" })).toBe(false)
     expect(installAllows({ type: "local", path: tmpdir() })).toBe(false)
     expect(installAllows({ type: "builtin" })).toBe(false)
     expect(installAllows({ type: "sdk" })).toBe(false)
     expect(releaseTagIn("file:///cache/@v1.2.3/dist/index.js")).toBe("v1.2.3")
-    expect(releaseTagIn("github:joe-broadhead/opencode-specter#v0.1.0")).toBe("v0.1.0")
+    expect(releaseTagIn("github:we-the-rebel-alliance/specter-plugin#v0.0.0")).toBe("v0.0.0")
     expect(releaseTagIn(import.meta.url)).toBeUndefined()
     expect(isLoopback(new URL("http://127.0.0.1:9/"))).toBe(true)
   })
@@ -41,7 +41,7 @@ describe("a source install does not call Specter", () => {
   it("treats a module URL with a release tag as released, and a source path as not", async () => {
     await expect(vendorCallsAllowed()).resolves.toBe(false)
     await expect(vendorCallsAllowed({ released: true })).resolves.toBe(true)
-    await expect(vendorCallsAllowed({ moduleUrl: "file:///pkg/@v0.1.0/dist/index.js" })).resolves.toBe(true)
+    await expect(vendorCallsAllowed({ moduleUrl: "file:///pkg/@v0.0.0/dist/index.js" })).resolves.toBe(true)
     simulateTaggedRelease(true)
     await expect(vendorCallsAllowed()).resolves.toBe(true)
     simulateTaggedRelease(undefined)
@@ -134,7 +134,7 @@ describe("the git-tag fallback", () => {
       git("init", "--quiet")
       git("-c", "user.name=release test", "-c", "user.email=release@example.invalid", "commit", "--allow-empty", "-qm", "checkout")
       expect(exactGitTag(dir)).toBe(false)
-      git("tag", "v0.0.1")
+      git("tag", "v0.0.0")
       expect(exactGitTag(dir)).toBe(true)
       // A tag that is not a semver tag, on its own commit, is not a release either.
       git("-c", "user.name=release test", "-c", "user.email=release@example.invalid", "commit", "--allow-empty", "-qm", "later")

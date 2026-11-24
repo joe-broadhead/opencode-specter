@@ -4,11 +4,8 @@
 // a parent OpenCode session, provider keys and proxies do not leak in. The working directory
 // moves there too, because the host can also open a location at it.
 import { mkdirSync } from "node:fs"
-import { join, resolve } from "node:path"
+import { join } from "node:path"
 import { scratchDir } from "./scratch.js"
-
-/** A directory whose node_modules holds another @opencode/sdk, such as 2.2.4 installed outside the lockfile. */
-export const SDK_OVERRIDE = process.env.HOST_SDK_DIR ? resolve(process.env.HOST_SDK_DIR) : undefined
 
 export const ROOT = scratchDir("specter-host-test-")
 const home = join(ROOT, "home")

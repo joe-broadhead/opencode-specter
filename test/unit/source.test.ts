@@ -52,7 +52,7 @@ describe("specter.saved: a saved company search's net-new results", () => {
     expect(page.account).toBe(ACCOUNT)
     expect(page.owner).toEqual(ownerOf("0123456789abcdef"))
     expect(page.scope).toEqual({ search: SEARCH })
-    expect(page.plugin).toBe("@joe-broadhead/opencode-specter")
+    expect(page.plugin).toBe("@we-the-rebel-alliance/specter-plugin")
     expect(page.more).toBe(false)
     expect(page.trust).toBe("untrusted")
     expect(ids(page)).toEqual(["company:hedgehog", "company:otter", "company:pinecone", "company:quarry", "company:ridge", "company:quakeworks"])

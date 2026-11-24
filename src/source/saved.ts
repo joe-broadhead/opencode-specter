@@ -98,7 +98,7 @@ import { createHash } from "node:crypto"
 import type { ApiOutput, RestInput } from "../api/request.js"
 
 /** The plugin's package name: every page names it. */
-export const PACKAGE = "@joe-broadhead/opencode-specter"
+export const PACKAGE = "@we-the-rebel-alliance/specter-plugin"
 /** The source's name, the `source` input the descriptor gives it. */
 export const SOURCE = "saved"
 /** The descriptor's id for it. */

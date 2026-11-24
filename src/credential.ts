@@ -1,4 +1,4 @@
-// The team API key. The plugin declares its own `specter` integration with one `key` method, the way OpenCode 2.2.3's
+// The team API key. The plugin declares its own `specter` integration with one `key` method, the way OpenCode 2.4.1's
 // built-in Tavily plugin declares Tavily's (SPEC.md, "B1 — resolved"), so the key is pasted in /connect and stored by
 // OpenCode as a key credential. There is deliberately no `env` method: the key never sits in an environment variable.
 // The key is read at call time, kept in memory only, sent only in the X-API-Key header to Specter's REST origin

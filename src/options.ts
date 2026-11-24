@@ -6,8 +6,7 @@ import { SpecterPluginError } from "./errors.js"
 
 /**
  * The time limit for one request to Specter's REST API, in milliseconds. The shape is opencode-tavily's
- * `executionTimeoutMs`; the numbers are not a Specter fact (docs/configuration.md, `requestTimeoutMs`). The jelly
- * declaration in package.json carries the same three numbers, and a unit test keeps them equal.
+ * `executionTimeoutMs`; the numbers are not a Specter fact (docs/configuration.md, `requestTimeoutMs`).
  */
 export const REQUEST_TIMEOUT = { default: 30_000, min: 5_000, max: 120_000 } as const
 
@@ -26,7 +25,7 @@ const OptionsSchema = z.strictObject({
 
 export type Options = z.output<typeof OptionsSchema> & { readonly access: Access }
 
-const EXAMPLE = `"plugins": [{ "package": "github:joe-broadhead/opencode-specter", "options": { "access": "ask-changes" } }]`
+const EXAMPLE = `"plugins": [{ "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0", "options": { "access": "ask-changes" } }]`
 
 export function loadOptions(raw: unknown): Options {
   const result = OptionsSchema.safeParse(raw ?? {})

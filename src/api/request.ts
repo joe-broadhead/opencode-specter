@@ -220,7 +220,7 @@ async function send(url: URL, input: RestInput, deps: RequestDeps): Promise<Resp
     // The key only to the REST base: a redirect target is checked before this line runs again.
     const headers: Record<string, string> = {
       Accept: "application/json",
-      "User-Agent": "opencode-specter",
+      "User-Agent": "specter-plugin",
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
       ...(onRestBase(current, deps.base) ? { [API_KEY_HEADER]: deps.key } : {}),
     }

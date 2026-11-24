@@ -3,9 +3,8 @@
 // this package (its built dist/) with options. A probe plugin lends its context to the tests. Specter is the loopback
 // fake behind the fetch router, and any other request fails the host's close().
 //
-// Host version: the SDK in devDependencies (2.2.3). HOST_SDK_DIR names a directory whose node_modules holds another
-// @opencode/sdk (scripts/check.mjs installs each tested release outside the lockfile); the host then runs that SDK.
-import { ROOT, SDK_OVERRIDE } from "./isolate.js"
+// Host version: the SDK in devDependencies (2.4.1), the one tested release.
+import { ROOT } from "./isolate.js"
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -19,7 +18,7 @@ import { simulateTaggedRelease } from "../../src/release.js"
 import { SpecterRpc, type Status } from "../../src/rpc.js"
 
 const REPO = realpathSync(fileURLToPath(new URL("../../", import.meta.url)))
-const SDK = join(SDK_OVERRIDE ? realpathSync(SDK_OVERRIDE) : REPO, "node_modules", "@opencode", "sdk")
+const SDK = join(REPO, "node_modules", "@opencode", "sdk")
 const manifest = JSON.parse(readFileSync(join(SDK, "package.json"), "utf8")) as { version: string; exports: { ".": { import: string } } }
 /** The OpenCode release under test: the version of the SDK that runs the host. */
 export const SDK_VERSION = manifest.version

@@ -4,7 +4,7 @@
 // from their specs, and counts the server's tools, recording the ones the table does not know. Synchronous; it never
 // throws, and a failure is kept for status.
 import type { Plugin } from "@opencode/plugin"
-import { type Access, errorText, NAMESPACE_DESCRIPTION, SERVER_NAME } from "./constants.js"
+import { errorText, NAMESPACE_DESCRIPTION, SERVER_NAME } from "./constants.js"
 import { reasonOf } from "./redact.js"
 import { READ_TOOL_CLASSES } from "./read-tools.js"
 import { SOURCE_TOOL_CLASSES } from "./source/index.js"
@@ -33,7 +33,6 @@ type ToolContext = { readonly tool: Pick<Plugin.Context["tool"], "transform"> }
 export async function registerTools(
   ctx: ToolContext,
   input: {
-    readonly access: Access
     readonly specs: readonly ToolSpec[]
     /** False while the `specter` name belongs to a server at another URL: its namespace is left as it is. */
     readonly owned: () => boolean
@@ -44,7 +43,7 @@ export async function registerTools(
   const specs = input.specs
   const registration = await ctx.tool.transform((editor) => {
     try {
-      if (input.owned()) editor.namespace({ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION[input.access] })
+      if (input.owned()) editor.namespace({ name: SERVER_NAME, description: NAMESPACE_DESCRIPTION })
       for (const spec of specs) editor.add(buildTool(spec) as never)
       const unknown: string[] = []
       let visible = 0

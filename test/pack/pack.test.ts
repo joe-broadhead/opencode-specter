@@ -1,8 +1,8 @@
 // Pack, install and load the published shape, after opencode-metaview's pack test. The tarball holds exactly the files
 // whitelist and installs with lifecycle scripts disabled. Installed alone, it loads in each stock OpenCode release it
 // is tested on (TESTED_HOSTS), which provides @opencode/plugin, OpenTUI and Solid itself; next to those packages, both
-// entry points also import under Bun. OPENCODE_BIN_2_2_3 to OPENCODE_BIN_2_2_7 and OPENCODE_BIN_2_3_0 name stock
-// binaries; otherwise each release is installed with npm, once per run. Every temp folder is a git repository under
+// entry points also import under Bun. OPENCODE_BIN_2_4_1 names a stock binary; otherwise the release is installed with
+// npm, once per run. Every temp folder is a git repository under
 // the system's /tmp, never under TMPDIR or HOME, so OpenCode's upward search for `.opencode` folders never reaches the
 // agents of whoever runs the test. Each stock host runs offline: anything it tries off the machine goes to a closed
 // port. PACK_TARBALL names a tarball that was already packed, such as the one a release publishes, to test it instead.
@@ -46,7 +46,7 @@ const DIST = ["dist/index.js", "dist/tui.js"]
 // Modules the host serves to plugins at runtime. Everything else must be inlined in the bundle.
 const SERVER_HOST_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/]
 const TUI_HOST_MODULES = [/^node:/, /^@opencode\/plugin(?:\/|$)/, /^@opentui\//, /^solid-js(?:\/|$)/]
-// The host packages OpenCode 2.2.3 ships; the versions come from devDependencies.
+// The host packages OpenCode 2.4.1 ships; the versions come from devDependencies.
 const HOST_PACKAGES = ["@opencode/plugin", "@opentui/core", "@opentui/solid", "solid-js"]
 // OpenCode's own agents.
 const BUILT_IN_AGENTS = ["build", "general", "explore", "compaction", "title", "summary", "plan"]
@@ -276,12 +276,12 @@ describe.each(TESTED_HOSTS)("installed alone, in stock OpenCode %s", (version) =
   }, 600_000)
 
   test("an untagged copy in a tag-named directory is not a release", async () => {
-    const dir = join(work, "@v0.0.1")
+    const dir = join(work, "@v0.0.0")
     mkdirSync(dir, { recursive: true })
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "specter-pack-tagname", private: true }))
     run("npm", ["install", join(work, pack().filename), "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"], dir)
     const installed = join(dir, "node_modules", ...pkg.name.split("/"))
-    expect(installed).toContain("@v0.0.1")
+    expect(installed).toContain("@v0.0.0")
     const host = await serve(version, installed, "-tagname")
     try {
       await host.until("the plugin finishes loading", async () => {
@@ -303,10 +303,10 @@ describe.each(TESTED_HOSTS)("installed alone, in stock OpenCode %s", (version) =
   }, 600_000)
 })
 
-describe("a real release install on stock OpenCode 2.3.2", () => {
+describe("a real release install on stock OpenCode 2.4.1", () => {
   test("a tagged package spec registers Specter's server, so it is not gated", async () => {
     const release = releaseRepo()
-    const host = await serve("2.3.2", release.spec, "-release")
+    const host = await serve("2.4.1", release.spec, "-release")
     try {
       await host.until("the plugin finishes loading", async () => {
         const { data } = await host.api<{ data: { id: string; state: { status: string } }[] }>("GET", "/api/plugin")
