@@ -7,8 +7,8 @@
 - macOS or Linux.
 
 ```sh
-git clone https://github.com/joe-broadhead/opencode-specter.git
-cd opencode-specter
+git clone https://github.com/we-the-rebel-alliance/specter-plugin.git
+cd specter-plugin
 npm ci --ignore-scripts
 npm run check
 ```
@@ -24,7 +24,7 @@ npm run build
 ```
 
 ```json
-{ "plugins": [{ "package": "/path/to/opencode-specter" }] }
+{ "plugins": [{ "package": "/path/to/specter-plugin" }] }
 ```
 
 ## `npm run check`
@@ -36,11 +36,10 @@ One command, `scripts/check.mjs`, runs every stage in order and stops at the fir
 | --- | --- |
 | `typecheck` | `tsc` over `src/` and the tests. |
 | `unit` | Vitest over `test/unit/`. |
-| `conformance` | The source contract's conformance kit, under Bun. A placeholder until the plugin declares a source. |
-| `kit` | The release kit's own tests. |
+| `conformance` | The source contract's conformance kit over the `specter.saved` source, under Bun. |
 | `build` | esbuild bundles `dist/index.js` and `dist/tui.js`, and checks `NOTICE`. |
 | `icons` | The family icon contract. |
-| `host` | The built plugin in an embedded OpenCode host, once per tested release, against a loopback fake. |
+| `host` | The built plugin in an embedded OpenCode 2.4.1 host, against a loopback fake. |
 | `pack` | Packs, installs with scripts disabled and imports both entries. |
 | `forbidden` | The forbidden APIs and private names. |
 | `copies` | The shared kit files against their pinned hashes. |
@@ -58,8 +57,9 @@ Versions follow semantic versioning on the plugin's contract: its options, the s
 `/specter-status` command, the status RPC, the skill names and the default rules.
 
 Each release is the GitHub tag `v<version>`, made only by `.github/workflows/release.yml` after the owner approves the
-`release` environment. While changes land, their notes go under `## [Unreleased]` in `CHANGELOG.md`; a release-prep
-commit runs `node scripts/changelog.mjs release`. `package.json` stays `"private": true` and in canonical form.
+`release` environment; the copied release kit is replaced with `plugin-kit` when the contract lands. While changes
+land, their notes go under the unreleased section of `CHANGELOG.md`. `package.json` stays `"private": true` and in
+canonical form.
 
-A pull request's CI runs the Linux runners only; the push to `master` runs every runner, Apple-silicon macOS
-(`macos-26`) too, and the release stands on that run. An Intel Mac (`macos-26-intel`) is not required.
+CI is one job, `ci`, on Node 24: a pull request from a fork runs on `ubuntu-24.04`, and a same-repository pull request
+or a push may use the org runner when `CI_RUNNER_PUBLIC` is set. It runs `npm ci --ignore-scripts` and `npm run check`.

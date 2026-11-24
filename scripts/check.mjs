@@ -1,7 +1,7 @@
 // The one local entry point: `npm run check` runs every stage in order and stops at the first failure.
 // `node scripts/check.mjs <stage>...` runs only the named stages, in the order given.
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { delimiter, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -25,8 +25,8 @@ const EXPORTS = {
 // dist/ holds one self-contained bundle per entry, and nothing else (scripts/build.mjs).
 const DIST = ["index.js", "tui.js"]
 // The tested OpenCode line. The host provides @opencode/plugin, OpenTUI and Solid, so the package declares no peers.
-const HOST_RANGE = ">=2.2.3 <2.4.0"
-const HOST_DEV_PIN = "2.2.3"
+const HOST_RANGE = ">=2.4.1 <2.5.0"
+const HOST_DEV_PIN = "2.4.1"
 const ABSENT_FIELDS = ["dependencies", "optionalDependencies", "bundleDependencies", "bundledDependencies", "peerDependencies", "peerDependenciesMeta", "engines", "overrides"]
 const LIFECYCLE_SCRIPTS = ["preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", "prepublish", "prepublishOnly", "prepack", "postpack", "publish", "postpublish"]
 
@@ -37,7 +37,9 @@ const stages = {
   // The source contract's conformance kit over the declared source: it runs the plugin's own events_list, probe and
   // scope.suggest against recorded Specter answers and writes reports/conformance-report.json, which must say ok: true.
   conformance: () => run("bun", ["test", "./test/conformance"]),
-  kit: () => run("node", ["--test", "scripts/release-kit.test.mjs"]),
+  // No release-kit stage in 4a: the copied kit (pinned for phase 4b to replace with plugin-kit) asserts the retired
+  // multi-runner CI matrix, while this phase's CI is one job on the required runner rule. The copies stage still
+  // verifies the pinned files byte for byte.
   build: () => run("node", ["scripts/build.mjs"]),
   icons: () => run("node", ["scripts/check-icons.mjs"]),
   host: host,
@@ -76,30 +78,16 @@ function run(command, args, options = {}) {
 }
 
 /**
- * The host suite on each tested release: the locked @opencode/sdk for HOST_DEV_PIN, and the others installed from npm
- * into a temp folder under the system's /tmp, outside the lockfile, once per run. HOST_SDK_DIR runs only that SDK.
+ * The host suite on the one tested release, the locked @opencode/sdk for HOST_DEV_PIN. The single entry in
+ * TESTED_HOSTS must be that pin: there is no matrix and no second SDK install.
  */
 function host() {
-  if (process.env.HOST_SDK_DIR) return run("bun", ["test", "./test/host"])
-  for (const version of TESTED_HOSTS) {
-    console.log(`\n[check] host on @opencode/sdk ${version}`)
-    if (version === HOST_DEV_PIN) {
-      const code = run("bun", ["test", "./test/host"])
-      if (code !== 0) return code
-      continue
-    }
-    const dir = mkdtempSync(join(realpathSync("/tmp"), `specter-sdk-${version}-`))
-    try {
-      // Its own package.json, so npm never walks up to another one.
-      writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "specter-host-sdk", private: true }))
-      const code = run("npm", ["install", `@opencode/sdk@${version}`, "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline"], { cwd: dir })
-        || run("bun", ["test", "./test/host"], { env: { HOST_SDK_DIR: dir } })
-      if (code !== 0) return code
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+  if (TESTED_HOSTS.length !== 1 || TESTED_HOSTS[0] !== HOST_DEV_PIN) {
+    console.error(`[check] TESTED_HOSTS must be exactly ["${HOST_DEV_PIN}"], found ${JSON.stringify(TESTED_HOSTS)}.`)
+    return 1
   }
-  return 0
+  console.log(`\n[check] host on @opencode/sdk ${HOST_DEV_PIN}`)
+  return run("bun", ["test", "./test/host"])
 }
 
 /**
