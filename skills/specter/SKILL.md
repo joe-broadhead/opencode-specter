@@ -19,8 +19,8 @@ one. The plugin's own tools are these, and each names what it costs:
 | `specter_events_list` | For Memory's collector and scripts, not for answering questions: a saved company search's net-new companies as source-contract events, with a cursor. | Credits: 1 per company |
 | `specter_probe` | For a consumer binding `specter.saved`: the organisation the team key belongs to. | Free |
 
-Specter publishes no price per credit, so the plugin never states one: it reports what a call spent in credits, and
-nothing in dollars.
+Specter publishes no price per credit. The plugin reports what a call spent in credits; the `specter.saved` source's
+declaration carries only an estimate for a consumer's budget, never a Specter price.
 
 ## Rules
 
