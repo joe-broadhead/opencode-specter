@@ -1,9 +1,9 @@
 ---
 name: specter
-description: Read before the first Specter tool call (specter_*, tools.specter.*). For Specter (tryspecter.com) deal data - resolving a company, reading its profile, a saved search's matches and the specter.saved feed - and for checking whether Specter is set up. Not for Affinity CRM records or another vendor called Spectre.
+description: Specter (tryspecter.com) deal data: resolve a company, read its profile, a saved search's matches and the specter.saved feed, and check setup. Not for Affinity CRM records.
 ---
 
-If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key), or on Jelly call jelly_connection_request.
+If Specter's tools are absent, run `/connect` and sign in to Specter (the `specter` server in `/mcps`, and **Specter** for the team API key).
 
 # Specter
 

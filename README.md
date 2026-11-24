@@ -1,184 +1,90 @@
-# Specter for OpenCode
+# Specter plugin for OpenCode
 
-Connects OpenCode to [Specter](https://tryspecter.com)'s deal data, so your agents can find a company and read its
-profile and signals, through Specter's hosted MCP server and the plugin's own tools on your team's Specter API key.
+Connects OpenCode to [Specter](https://tryspecter.com)'s deal data: Specter's hosted MCP tools, signed in per person,
+and the plugin's own tools on the team's Specter API key for company profiles, saved searches and the `specter.saved`
+feed.
 
-Unofficial; not affiliated with Specter.
+Unofficial; not affiliated with Specter. Specter is a trademark of its owner, and this plugin is not endorsed by them.
 
-Specter is a trademark of its owner; this unofficial plugin is not endorsed by them.
-
-> Not yet released. The plugin's own tools read companies and saved searches on the team key (`specter_search_companies`, `specter_get_company`, `specter_list_saved_searches`, `specter_saved_search_results`, `specter_events_list` and `specter_probe`); Specter's own MCP tools are not listed here yet.
+This is `0.0.0`, the first release line. The plugin-contract adoption, accounts and the full documentation come next;
+until a release tag is cut, a source checkout sends nothing to Specter.
 
 ## Requirements
 
-- OpenCode `>=2.2.3 <2.4.0`, tested on 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0. A later 2.2 or 2.3 release loads
-  too, and the status marks it untested. Outside `>=2.2.3 <2.4.0` the plugin does not load, unless you set
-  [`allowUntestedHost`](docs/configuration.md#options).
+- OpenCode `>=2.4.1 <2.5.0`, tested on 2.4.1. Outside that range the plugin refuses to load unless the
+  `allowUntestedHost` option is set.
 - macOS or Linux.
-- A Specter seat. Specter's MCP server signs each person in on their own, and is part of Specter's seat plan.
-- For the plugin's own tools: API access for your team. Specter's API needs at least one paid seat,
-  and the team's one API key lives in Specter's [API Console](https://app.tryspecter.com/settings/api-console). With
-  no key there yet, choose **Request API Access** in the console; Specter says it reviews requests within one business
-  day. API use is metered in credits, priced on request; a trial of 200 free credits can be requested in the same
-  console. Sources: Specter's [Authentication](https://api.tryspecter.com/api-ref/auth.md) and
-  [Plans & Pricing](https://api.tryspecter.com/api-ref/plans.md) pages. Not yet confirmed: whether a team with a seat
-  is approved without a separate API contract.
+- A Specter seat for the per-person MCP sign-in.
+- For the plugin's own tools, API access for the team. The team's one API key is in Specter's
+  [API Console](https://app.tryspecter.com/settings/api-console); API use is metered in credits.
 
 ## Install
 
-Not released. `package.json` is `0.0.1` and there is no release tag, so there is no install line. A source install
-does not call Specter. When a release exists, its tag is the install spec.
+```sh
+opencode plugin add github:we-the-rebel-alliance/specter-plugin#v0.0.0
+```
+
+The same entry in `opencode.json`:
+
+```json
+{ "plugins": [{ "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0" }] }
+```
+
+A source checkout is not a release: it registers no MCP server and answers `NOT_RELEASED` rather than call Specter.
 
 ## Sign in
 
-Specter has two sign-ins, and they are separate:
+Specter has two separate sign-ins:
 
-| Entry | What it is | What it signs in |
-| --- | --- | --- |
-| The `specter` server (in `/mcps`) | Specter's hosted MCP server, `https://mcp.tryspecter.com/mcp`, with OpenCode's own OAuth sign-in. Yours alone. | Specter's own MCP tools. |
-| **Specter** (in `/connect`) | The plugin's key sign-in: paste the team's Specter API key. | The plugin's own tools on Specter's REST API, and the `specter.saved` source. |
+| Entry | What it signs in |
+| --- | --- |
+| The `specter` server in `/mcps` | Specter's own MCP tools, with OpenCode's OAuth sign-in. Yours alone. |
+| **Specter** in `/connect` | The plugin's own tools and the `specter.saved` source, with the team's API key. |
 
-The key is the team's: everyone who uses it spends from one credit pool and one rate limit, and Specter cannot tell
-who made a call. OpenCode stores the key; the plugin reads it when a call needs it, sends it only to Specter's REST API
-in the `X-API-Key` header, and never shows it in an error, a status line, a log line or a result. There is no
-environment variable for the key.
-
-Specter's MCP server publishes the sign-in metadata OpenCode uses: OAuth with PKCE, and both ways for OpenCode to
-identify itself (a client ID metadata document, or dynamic client registration). Specter documents no admin step for
-it ([How Specter MCP Authentication Works](https://intercom.help/specter-labs/en/articles/14495365-how-specter-mcp-authentication-works));
-your company's single sign-on may still ask an admin to approve a new app. The plugin's tests sign in against a fake
-built from that metadata. Not yet confirmed: a sign-in with a live Specter account.
-
-Each person gets 100 MCP tool calls a day. Past that, a call spends the team's API credits only if a Specter workspace
-admin turned on **Use API credits for MCP requests** in Specter's [MCP settings](https://app.tryspecter.com/settings/mcp);
-otherwise Specter declines it until the next day. See [What Specter calls cost](docs/costs.md).
+The key is the team's: everyone who uses it spends from one credit pool and one rate limit, and Specter cannot tell who
+made a call. It is sent only to Specter's REST API in the `X-API-Key` header, and never appears in a status line, a
+log line or a result.
 
 ## Use
 
-Ask for what you need. The `specter` skill tells the model how to use Specter's tools; `specter-write` covers calls that
-spend credits or change Specter data.
+The `specter` skill covers reads; `specter-write` covers calls that spend credits or change Specter data. Specter's own
+MCP tools appear under the same `specter_` prefix. The plugin's own tools are `specter_search_companies` (free),
+`specter_get_company`, `specter_list_saved_searches` (free) and `specter_saved_search_results`.
 
-The plugin's own tools read Specter's public REST API with the team key, and each says what it costs:
-
-| Tool | What it does | Cost |
-| --- | --- | --- |
-| `specter_search_companies` | Resolve 1 to 50 domains to Specter company IDs (Find company ID). | Free |
-| `specter_get_company` | One company's profile by its Specter ID. | 1 credit per result returned |
-| `specter_list_saved_searches` | The saved searches shared with the API, as `{ id, label }`. | Free |
-| `specter_saved_search_results` | One saved company search's matches, page by page, optionally only what was added since a moment. | 1 credit per result returned |
-
-Specter's own MCP tools appear under the same `specter_` prefix once you sign in. The plugin does not classify them
-until it has captured the live server's tool list, so each one is treated like a change (see
-[Permissions](#permissions)).
-
-## The saved-search source
-
-`specter.saved` is this plugin's one source under the source contract: the companies Specter **added to one saved
-company search**, as events, so Memory's collector or a script can follow a search without asking for the whole list
-again. It reads with the team key and spends one credit from the team's plan per company Specter returns.
-
-- **Scope.** The thing a person confirms is the saved search's id (`scope.search`), from `specter_list_saved_searches`.
-  The search must be shared to the API. People, talent and other products are not in this source: those are data about
-  individuals.
-- **Companies only, metadata only.** Each event carries the company's Specter id (`company:<id>`), its name, and the
-  read that first listed it. No profile prose, no contact details, no link (Specter's reference publishes no company-page
-  address).
-- **When it happened.** Specter's records carry no "added to the search" time, so an event's `occurred_at` is when the
-  read that first listed the company was answered, taken from Specter's own `Date` header. It is not the company's
-  `last_updated`, which says nothing about when the search matched it.
-- **Windows.** A read lists one *window*: the companies Specter returns for one `new_results_after` cutoff, page by
-  page by offset. The cutoff never moves inside a window, so a burst of companies added at one instant drains page by
-  page and never jams, at any `limit`. The next window starts two minutes *before* this window's first answer, so a
-  company added where the reader had already passed, or one that became visible late, is listed next time.
-- **The overlap and the gap.** After the first page each read also re-reads the five companies before its offset. If
-  none of the companies the window already listed is among them, more companies left the search ahead of the reader
-  than the overlap covers, so one may have been skipped: the page answers `gap` with reason `window-truncated`, once
-  per read, and reads on. Nothing is skipped without that gap, whatever order Specter answers in, provided companies
-  that stay in the search keep their order between two calls (a live check confirms it).
-- **No company listed twice.** The cursor carries a 40-bit hash of each company the recent windows listed (64 at most,
-  plus the 15 just before the offset), never the ids, and drops a company whose hash it carries. A company comes back
-  through the lookback only while its window's last read is within two minutes of the cutoff, so a group of hashes is
-  kept exactly that long. When more than 64 companies are in play at once (added within two minutes of a poll, plus
-  the poll's own), the excess may be listed again by the next read; never by the same read, unless more companies are
-  added ahead of it while it pages than the cursor keeps. Specter's inclusive cutoff ("on or after") is covered by the
-  same carry. The cursor's worst case is 976 characters, inside the contract's 1,024, and that budget is checked
-  before a single credit is spent.
-- **Credits per call.** One call asks Specter for at most 30 companies, so it costs at most 30 credits: a page of up to
-  25 and its overlap. The two minutes are an assumption until a live check measures the lag between an addition and
-  its visibility.
-- **60 days, then a gap.** Specter tracks additions for 60 days. A cursor older than that answers `gap` with reason
-  `expired` once, with `more: true` so the consumer reads on at once, and its cursor restarts at the earliest line
-  Specter can still serve — the window's edge, not "now" — so the sixty days Specter still holds are listed rather than
-  skipped. When Specter itself answers 422 for a cutoff, the same line is used unless the cursor is already at the edge,
-  where it restarts at "now" because nothing earlier is known to be readable.
-- **A cut answer is a failure.** A body cut at the read's inline limit, or a company record the plugin does not
-  recognise, fails the whole page with `UNAVAILABLE` and holds the cursor: no company is dropped silently, and the
-  credits reported are always what Specter returned.
-
-The contract's own documentation is in the [source contract](https://github.com/we-the-rebel-alliance/source-contract).
+`specter.saved` lists the companies Specter added to one saved company search since a cursor, as events for a collector
+or automation. It reads with the team key and spends one credit per company Specter returns. The scope is the saved
+search's id; companies only, metadata only. A cursor older than Specter's 60-day window answers one `gap` and restarts
+at the earliest readable line.
 
 ## Permissions
 
-The plugin puts a block of default rules into each agent right after its base `* * allow` rule. The `access` option
-generates the block from three classes of tool:
+The `access` option generates default rules for every agent:
 
-| Class | What it is | `all` (default) | `ask-changes` | `read-only` |
-| --- | --- | --- | --- | --- |
-| `read` | Changes nothing. Free, except a source's read, which Specter bills per company. | allow | allow | allow |
-| `spend` | Costs Specter credits from the team's pool. | allow | ask | deny |
-| `write` | Changes Specter data, such as a list. | allow | ask | deny |
-| not yet classified | Every tool the plugin does not know. | allow | ask | deny |
+| `access` | Reads | Calls that spend credits, and changes |
+| --- | --- | --- |
+| `all` (default) | allow | allow |
+| `ask-changes` | allow | ask |
+| `read-only` | allow | deny |
 
-The last matching rule wins, so an agent's own stricter rules, your `permissions` and saved approvals still win.
-`/specter-status` names any agent that misses the block (an agent defined only in your config), and shows the block to
-paste first in that agent's own `permissions`.
-
-## Configure
-
-The plugin works without options. The [configuration guide](docs/configuration.md) covers `access`,
-`requestTimeoutMs` and `allowUntestedHost`.
-
-## Organisation rollout
-
-An organisation can install the plugin for every user through OpenCode's system config:
-`/Library/Application Support/opencode/opencode.json` on macOS, `/etc/opencode/opencode.json` on Linux. Each member
-then signs in to the `specter` server, and someone with the team key pastes it in `/connect` → **Specter**. Never put
-the key in `opencode.json`.
-
-To rotate the team key, for example after it leaked, email api-support@tryspecter.com, as Specter's
-[Authentication](https://api.tryspecter.com/api-ref/auth.md) page says. Then everyone pastes the new key in `/connect` →
-**Specter**. Until they do, the old key is refused. `/specter-status` asks Specter about a key the first time it sees
-it, and again once the last answer is more than 10 minutes old, in the background: a few seconds after such a
-`/specter-status`, it shows the old key as rejected by Specter, with no restart. While that check runs, it shows the
-key as not checked. The plugin's own tools, when they arrive, fail with `KEY_REJECTED` on the old key at once.
+A tool the plugin has not classified is treated like a change. The last matching rule wins, so an agent's own stricter
+rules, your `permissions` and saved approvals still win. `/specter-status` names any agent without the block and shows
+the rules to copy into it.
 
 ## Troubleshooting
 
-Run `/specter-status` first. It always ends with one next step, `Nothing to do.` when everything is ready. Its
-connection states:
-
-| Connection | What to do |
-| --- | --- |
-| `sign-in required` | Open `/mcps`, choose `specter` and sign in. |
-| `connecting` | Wait a few seconds and run `/specter-status` again. |
-| `failed` | Check your network connection, then reconnect `specter` in `/mcps`. |
-| `disabled` | Turn the `specter` server back on in `/mcps`. |
-| `not configured` | Restart OpenCode; check that no other plugin removes the server named `specter`. |
-| `conflict` | Your config defines its own server named `specter` at another address. Point it at Specter's address, or remove it. |
-
-The plugin's errors start with a code and end with one next step:
+Run `/specter-status` first. Every error starts with one of these codes and ends with one next step.
 
 | Code | When | Next step |
 | --- | --- | --- |
-| `HOST_UNTESTED` | Start-up, outside `>=2.2.3 <2.4.0` | Update OpenCode or the plugin, or set `allowUntestedHost`. |
+| `HOST_UNTESTED` | Start-up, outside `>=2.4.1 <2.5.0` | Update OpenCode or the plugin, or set `allowUntestedHost`. |
 | `OPTIONS_INVALID` | Start-up: an option is unknown or has a wrong value | Fix that option in `opencode.json`; the message names it. |
 | `SKILLS_INVALID` | Start-up: a shipped skill file is missing or malformed | Reinstall the plugin. |
 | `RULES_NOT_ADDED` | Status: the default rules could not be added | Restart OpenCode. |
 | `SERVER_NOT_REGISTERED` | Status: the `specter` server or its tools could not be registered | Restart OpenCode. |
 | `INTEGRATION_NOT_REGISTERED` | Status: the **Specter** key sign-in could not be added to `/connect` | Restart OpenCode. |
-| `KEY_UNAVAILABLE` | Log warning: OpenCode could not read the key | Run `/connect`, choose **Specter** and paste the key again. |
-| `NOT_RELEASED` | A source install tried to call Specter | Wait for a release tag. Do not install this repository from source if you need to call Specter. |
-| `STATUS_UNAVAILABLE` | Status | Try again in a few seconds; if it persists, restart OpenCode. |
+| `KEY_UNAVAILABLE` | OpenCode could not read the key | Run `/connect`, choose **Specter** and paste the key again. |
+| `NOT_RELEASED` | A source install tried to call Specter | Use a release tag; a source install sends nothing. |
+| `STATUS_UNAVAILABLE` | Status could not be read | Try again in a few seconds; if it persists, restart OpenCode. |
 | `AUTH_REQUIRED` | A tool needs the team key and none is connected | Run `/connect`, choose **Specter** and paste the team API key. |
 | `INPUT_INVALID` | A tool's input does not fit its schema | Fix the input, then call the tool again. |
 | `API_PATH_INVALID` | A request path could leave Specter's REST API | Pass a relative path. |
@@ -188,76 +94,25 @@ The plugin's errors start with a code and end with one next step:
 | `API_REDIRECT_LOOP` | Specter redirected more than 5 times | Try again later. |
 | `API_REDIRECT_INSECURE` | Specter redirected to a non-HTTPS address | Try again later. |
 | `API_REDIRECT_OFF_HOST` | Specter redirected a read outside its REST API | Try again later. |
-| `KEY_REJECTED` | Specter refused the team API key (401, or a 403 that refuses the key itself) | Run `/connect`, choose **Specter** and paste a current key from Specter's [API Console](https://app.tryspecter.com/settings/api-console). |
-| `OUT_OF_CREDITS` | Specter answered 402: the team's credit budget for the period is spent | Wait for the period to renew, or ask Specter for more credits. Calls that spend credits fail until then. |
-| `DAILY_CREDIT_CAP_REACHED` | Specter answered 402: the organisation's daily credit limit is reached | Wait until 00:00 UTC (the message gives the wait when Specter sends it); an admin can ask Specter to change the limit. |
-| `UPSTREAM_ERROR` | Specter answered with another error status | The one in the message: for 403, the team's plan does not include that endpoint; for 429, wait the seconds it names; for 5xx on a call that spends credits, check before you call it again. The message carries Specter's request ID for a report to api-support@tryspecter.com. |
+| `KEY_REJECTED` | Specter refused the team API key | Paste a current key from the API Console in `/connect`. |
+| `OUT_OF_CREDITS` | The team's credit budget for the period is spent | Wait for the period to renew, or ask Specter for more credits. |
+| `DAILY_CREDIT_CAP_REACHED` | The organisation's daily credit limit is reached | Wait until 00:00 UTC; an admin can ask Specter to change the limit. |
+| `UPSTREAM_ERROR` | Specter answered with another error | Follow the message's next step, which names Specter's request ID for a report. |
 
-A script's errors from the tools RPC have their own codes, listed in [Scripting](docs/scripting.md#errors).
+Scripts use the tools RPC's own codes, listed in [Scripting](docs/scripting.md#errors).
 
 ## Uninstall
 
 1. Sign out of the `specter` server: `opencode mcp logout specter`, while the plugin is installed.
 2. Remove the key: `opencode auth logout Specter`.
-3. Remove the plugin entry from `opencode.json`, then
-   `opencode reload`.
-4. The plugin keeps no data of its own. Remove the default rules you copied into agents' own `permissions`.
-
-## Known limits
-
-- **Not yet confirmed live.** Every endpoint, parameter, record shape and credit rate the plugin's own tools and the
-  source use comes from Specter's public API reference, recorded on 17 November 2026. No key has been used against
-  Specter yet, so the first live call may find a difference; `/specter-status` and the error's next step say what to do.
-- **Specter's MCP tools are not classified.** They appear in the namespace once you sign in, but a capture of the live
-  server's tool list has not run, so each one is treated like a change.
-- **The source is companies only.** People, talent, investor-interest and other products are data about individuals, so
-  `specter.saved` does not read them. Use the tools for a company search, and nothing here for a people search.
-- **The source lists what Specter returns, in Specter's order.** The order of results under `new_results_after` is not
-  documented, and the records carry no addition time, so an event's place in time is the read that first listed it.
-- **The key is one team's.** Specter issues one API key per team; rotating it is the team admin's job, through
-  `api-support@tryspecter.com` (see [SECURITY.md](SECURITY.md)).
-- **The source's read is a read.** It changes nothing, so the `access` option does not gate it, even though Specter
-  charges one credit per company: a consumer's own consent and budget decide whether it runs, and the `specter` skill
-  says never to call it to answer a question. The direct `specter_saved_search_results` and `specter_get_company` calls
-  are `spend`, and `access` gates those as changes.
-- **Credits for re-reads and refusals.** The page overlap and the lookback re-read companies Specter still returns, so
-  a poll can cost a few more credits than the events it carries; `cost` always reports what Specter returned. A page
-  that fails after Specter answered — a cut body, an unrecognised record, a rate limit on its second read — is still
-  charged, so an error that repeats costs credits until it is fixed.
-- **Shifts inside one window.** The page overlap recovers a company shifted back by fewer than five places (fewer than
-  the page when the caller's `limit` is below five). A larger shift between two page reads of one window answers one
-  `window-truncated` gap; the company it skipped is listed again only if it was added within the lookback.
-- **The lookback re-reads, and re-charges.** Every company added within two minutes before a poll is read by that poll
-  and again by the next, so a poll costs up to twice its new companies plus the overlaps. Polling more often than every
-  two minutes re-reads the last two minutes' companies on each poll; nothing is listed twice, but each re-read is
-  charged.
-- **A hash collision drops a company.** The cursor tells companies apart by 40 bits of their id's SHA-256; two ids that
-  share them make a new company look already listed. That is about once in 140,000 years at 100,000 new companies a
-  year.
-- **One team key.** Specter issues one API key per team, so it cannot be scoped down per person, and every call with
-  it spends from one credit pool and one rate limit of 15 requests a second. Specter's error codes also mention
-  per-member keys; the plugin has not been tried with one.
-- **Credit costs come from Specter's docs, and the dollar price is an estimate.** [What Specter calls cost](docs/costs.md)
-  lists Specter's published rates for each MCP tool and REST call, with their sources; they are not yet confirmed
-  against live calls. Specter publishes no price per credit, so the source's declaration states **about $0.10 a credit**
-  as an estimate, rounded up from comparable company-data APIs so it overstates rather than understates; your team's
-  contract rate replaces it. A result reports what it spent in credits, and the plugin never guesses more than this.
-- **Error meanings come from Specter's docs.** The codes for a refused key, spent credits, the daily credit limit and
-  the rest follow Specter's [Errors](https://api.tryspecter.com/api-ref/errors.md) page, not yet confirmed against live
-  responses.
-- **Retries.** A free read is retried on a rate limit, waiting the seconds Specter names in `X-RateLimit-Reset`, or on
-  a server error; a call that may spend credits is never retried, and nothing is retried after a 402.
-- **No browser automation.** Specter's terms forbid automated access outside its API; the plugin never drives the
-  website.
-- **Specter content is not trusted.** A result can carry instructions; the skills tell the model not to follow them.
-- **Hosts and platforms.** Tested on OpenCode 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0, on macOS or Linux.
+3. Remove the plugin entry from `opencode.json`, then run `opencode reload`.
+4. The plugin keeps no data of its own. Remove the default rules you copied into an agent's own `permissions`.
 
 ## Links
 
 - [Configuration](docs/configuration.md)
 - [Architecture](docs/architecture.md)
 - [Scripting](docs/scripting.md)
-- [In Jelly](docs/jelly.md)
 - [What Specter calls cost](docs/costs.md)
 - [Specter's MCP tools, a draft classification](docs/tool-classes.md)
 - [Security](SECURITY.md)

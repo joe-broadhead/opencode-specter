@@ -1,16 +1,16 @@
 # Repository rules
 
-This repository builds `@joe-broadhead/opencode-specter`, an unofficial OpenCode plugin that registers Specter's hosted
-MCP server under the name `specter` and, in later releases, adds its own Specter tools on the team's API key. User docs:
-`README.md`, `docs/configuration.md`; contributor docs: `docs/architecture.md`, `CONTRIBUTING.md`.
+This repository builds `@we-the-rebel-alliance/specter-plugin`, an unofficial OpenCode plugin that registers Specter's
+hosted MCP server as `specter` and adds the plugin's own Specter REST tools and the `specter.saved` source on the
+team's API key. User docs: `README.md`, `docs/configuration.md`; contributor docs: `docs/architecture.md`,
+`CONTRIBUTING.md`.
 
 ## Platform
 
-- Use only public APIs of `@opencode/plugin` 2.2.3. The supported host range is exactly `>=2.2.3 <2.4.0`, in
+- Use only public APIs of `@opencode/plugin` 2.4.1. The supported host range is exactly `>=2.4.1 <2.5.0`, in
   `package.json` `opencode.host`, `SUPPORTED_HOST` in `src/constants.ts` and `HOST_RANGE` in `scripts/check.mjs`.
-  Never write it as `^2.2.3`.
-- Test against stock OpenCode 2.2.3, 2.2.4, 2.2.5, 2.2.6, 2.2.7 and 2.3.0. `TESTED_HOSTS` in `src/constants.ts` is the
-  one list.
+  Never write it as `^2.4.1`.
+- Test against stock OpenCode 2.4.1 only. `TESTED_HOSTS` in `src/constants.ts` is the one list.
 - Keep the plugin ids `specter.deals` (server and status RPC), `specter.deals.tools` (tools RPC) and
   `specter.deals.tui` (TUI), and the server name `specter`.
 
@@ -47,6 +47,7 @@ contract's tools RPC).
 - Transforms are synchronous and never throw.
 - The plugin's own errors are `SpecterPluginError(code, message, nextStep)`, from the one `CODES` table.
 - `dist/` holds exactly two self-contained bundles, `index.js` and `tui.js`.
+- No pinned methods and no per-request hooks.
 
 ## Package
 
@@ -54,7 +55,7 @@ contract's tools RPC).
   carries their licences.
 - Ship prebuilt `dist/` and no `.d.ts` files. No install, `prepare` or `prepack` scripts.
 - The shared kit files are byte-for-byte copies, pinned in `scripts/check-copies.mjs`. Change them in every plugin at
-  once.
+  once. They are replaced with `plugin-kit` when the contract lands.
 - Releases come only from `.github/workflows/release.yml`, approved by the owner. Never push a tag or a `release/*`
   branch.
 
