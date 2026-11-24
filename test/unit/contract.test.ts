@@ -27,7 +27,7 @@ describe("the source contract", () => {
     const scripting = read("docs/scripting.md")
     expect(scripting).toContain(NAME)
     expect(scripting).toContain(VERSION)
-    expect(read("src/tools-rpc.ts")).toContain(`tag v${VERSION}`)
+    expect(read("src/tools-rpc.ts")).toContain(`version ${VERSION}`)
   })
 
   it("still exports the tools RPC entry points the plugin imports", () => {
