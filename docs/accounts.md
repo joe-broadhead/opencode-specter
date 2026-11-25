@@ -6,9 +6,11 @@ Specter signs in twice, and the two are deliberately separate:
 
 - **Each account alias is Specter's own MCP server.** The manifest's account mechanism is `mcp`, so OpenCode holds one
   OAuth sign-in per alias, and Specter's MCP tools are passed through per alias. A person's sign-in is theirs alone.
-- **The team API key is not an account.** The plugin's own tools and the `specter.saved` feed use one team key for the
-  whole team; it is a separate integration, `specter-team`, and its methods are `accounts: none`. It never stands in for
-  a person's account, and its probe names the key's fingerprint rather than a person.
+- **The team API key is not an account.** The four own REST tools (`search_companies`, `get_company`,
+  `list_saved_searches`, `saved_search_results`) and `status` use one team key for the whole team and are
+  `accounts: none`; `events_list` and `probe` are `accounts: optional`, because a page and a probe answer for one alias.
+  The key is the separate integration `specter-team`; it never stands in for a person's account, and its probe names the
+  key's fingerprint rather than a person.
 
 ## Mechanism
 

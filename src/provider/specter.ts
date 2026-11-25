@@ -146,7 +146,11 @@ export function createProvider(deps: ProviderDeps): SpecterProvider {
       return searchesOf(answer.data)
         .filter((search) => search.product_type === undefined || COMPANY_PRODUCTS.has(search.product_type))
         .map(savedSearchOption)
-        .filter((option) => (seen.has(option.id) ? false : (seen.add(option.id), true)))
+        .filter((option) => {
+          if (seen.has(option.id)) return false
+          seen.add(option.id)
+          return true
+        })
         .slice(0, 64)
     },
 

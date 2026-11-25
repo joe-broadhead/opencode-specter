@@ -3,7 +3,7 @@
 // of it, not an optional extra.
 import { readdir, readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
-import { type Plugin, Skill } from "@opencode/plugin"
+import { Skill } from "@opencode/plugin"
 
 type ParsedSkill = { readonly name: string; readonly description: string; readonly content: string }
 
@@ -12,12 +12,9 @@ const SKILLS = new URL("../skills/", import.meta.url)
 
 /** Every skill directory in the package, sorted. A directory without a SKILL.md is refused when it is read. */
 export async function skillIds(): Promise<readonly string[]> {
-  let entries
-  try {
-    entries = await readdir(fileURLToPath(SKILLS), { withFileTypes: true })
-  } catch {
+  const entries = await readdir(fileURLToPath(SKILLS), { withFileTypes: true }).catch(() => {
     throw invalid("The package's skills/ directory is missing or unreadable.")
-  }
+  })
   return entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
@@ -51,30 +48,24 @@ export function skillPath(id: string): string {
   return fileURLToPath(new URL(`${id}/SKILL.md`, SKILLS))
 }
 
-type SkillDomain = Pick<Plugin.Context["skill"], "transform">
-
-/** Reads every skill directory and registers each SKILL.md through the host's skill editor. */
-export async function registerSkills(skill: SkillDomain): Promise<{ dispose(): Promise<void> }> {
+/** Reads every skill directory and returns the host's Skill.Info values; setup registers them through ctx.skill. */
+export async function loadSkills(): Promise<readonly Skill.Info[]> {
   const ids = await skillIds()
-  const skills = await Promise.all(
+  return Promise.all(
     ids.map(async (id) => {
       const path = skillPath(id)
       const text = await readFile(path, "utf8").catch(() => {
         throw invalid(`skills/${id}/SKILL.md is missing or unreadable.`)
       })
-      return { id, path, ...parseSkill(id, text) }
+      const parsed = parseSkill(id, text)
+      return {
+        id: Skill.ID.make(id),
+        name: Skill.Name.make(parsed.name),
+        description: parsed.description,
+        // The host brands absolute paths; this one comes from the package location.
+        path: path as Skill.Info["path"],
+        content: parsed.content,
+      }
     }),
   )
-  return skill.transform((editor) => {
-    for (const skill of skills) {
-      editor.add({
-        id: Skill.ID.make(skill.id),
-        name: Skill.Name.make(skill.name),
-        description: skill.description,
-        // The host brands absolute paths; this one comes from the package location.
-        path: skill.path as Skill.Info["path"],
-        content: skill.content,
-      })
-    }
-  })
 }

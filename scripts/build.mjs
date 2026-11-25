@@ -2,7 +2,7 @@
 // stale sibling module the host still holds. The host provides @opencode/plugin and Node's built-ins; everything else the
 // plugin imports is bundled. NOTICE carries the licence of every bundled package, and the build fails when it no longer
 // matches what esbuild bundled (`--notice` rewrites it).
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { build } from "esbuild"

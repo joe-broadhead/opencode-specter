@@ -8,7 +8,7 @@ import { createHandlers, type ServerView } from "./handlers/index.js"
 import { manifest, version } from "./manifest.js"
 import { readOptions } from "./options.js"
 import { createProvider } from "./provider/specter.js"
-import { registerSkills } from "./skills.js"
+import { loadSkills } from "./skills.js"
 
 /** OpenCode's MCP servers, cut to the states status reports. */
 async function serversOf(ctx: Plugin.Context): Promise<readonly ServerView[]> {
@@ -24,6 +24,8 @@ async function serversOf(ctx: Plugin.Context): Promise<readonly ServerView[]> {
       case "failed":
       case "needs_auth":
         return { name: server.name, state: server.status.status, error: server.status.error }
+      default:
+        return { name: server.name, state: "failed", error: "OpenCode reported an unknown MCP server state." }
     }
   })
 }
@@ -37,7 +39,10 @@ export default Plugin.define({
 
     const accounts = await registerSpecterAccounts(ctx, manifest, options)
     const provider = createProvider({ key: accounts.key, timeoutMs: requestTimeoutMs })
-    const skills = await registerSkills(ctx.skill)
+    const skills = await loadSkills()
+    const skillRegistration = await ctx.skill.transform((editor) => {
+      for (const info of skills) editor.add(info)
+    })
     const problems = [...accounts.problems]
 
     try {
@@ -53,10 +58,10 @@ export default Plugin.define({
       const registration = await register(ctx, manifest, handlers)
       return async () => {
         await registration.dispose()
-        await skills.dispose()
+        await skillRegistration.dispose()
       }
     } catch (error) {
-      await skills.dispose().catch(() => undefined)
+      await skillRegistration.dispose().catch(() => undefined)
       throw error
     }
   },

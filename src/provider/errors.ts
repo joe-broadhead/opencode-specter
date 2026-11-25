@@ -63,7 +63,6 @@ export function headerNumber(headers: Headers, name: string): number | undefined
 /** The 403 codes that refuse a member's key itself, rather than one endpoint. */
 const KEY_REFUSALS: ReadonlySet<string> = new Set(["user_suspended", "api_access_not_granted", "org_key_disabled", "member_keys_disabled", "member_keys_admins_only"])
 
-const wait = (seconds: number | undefined, otherwise: string) => (seconds === undefined ? otherwise : `${Math.max(1, Math.ceil(seconds))} seconds`)
 const reportWith = (requestId: string | undefined) => (requestId ? ` If it keeps happening, email ${SUPPORT_EMAIL} with the request ID ${requestId}.` : ` If it keeps happening, email ${SUPPORT_EMAIL}.`)
 const keyStep = `Run /connect, choose "Specter team API key" and paste a current key from Specter's API Console (${API_CONSOLE_URL}), then try again.`
 
