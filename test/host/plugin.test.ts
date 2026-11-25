@@ -108,6 +108,25 @@ describe("the plugin in a host", () => {
     }
   }, 240_000)
 
+  test("parity: every own method is a host tool", async () => {
+    const host = await startHost()
+    try {
+      const tools = await host.probe().tool.list()
+      const own = tools.map((tool) => tool.id).filter((id) => id.startsWith("specter_")).sort()
+      expect(own).toEqual([
+        "specter_events_list",
+        "specter_get_company",
+        "specter_list_saved_searches",
+        "specter_probe",
+        "specter_saved_search_results",
+        "specter_search_companies",
+        "specter_status",
+      ])
+    } finally {
+      await host.close()
+    }
+  }, 120_000)
+
   test("registers every skills/*/SKILL.md in the real host", async () => {
     const host = await startHost()
     try {
