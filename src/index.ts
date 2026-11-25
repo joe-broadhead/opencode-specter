@@ -37,7 +37,7 @@ export default Plugin.define({
 
     const accounts = await registerSpecterAccounts(ctx, manifest, options)
     const provider = createProvider({ key: accounts.key, timeoutMs: requestTimeoutMs })
-    const skills = await registerSkills(ctx)
+    const skills = await registerSkills(ctx.skill)
     const problems = [...accounts.problems]
 
     try {

@@ -1,7 +1,10 @@
 // The built plugin in an embedded OpenCode 2.4.1 host, against the loopback fake. Nothing leaves the machine: close()
 // fails the test if the host tried.
 import { afterAll, describe, expect, test } from "bun:test"
+import { readdirSync } from "node:fs"
 import { request as httpRequest } from "node:http"
+import { join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
 import { agentRules, cleanup, pluginState, rpc, session, sessionWithRules, specterServer, startHost, status, until, type Host } from "./harness.js"
 
@@ -11,6 +14,12 @@ afterAll(cleanup)
 const TEAM_KEY = "team-key-for-the-host-test"
 /** The team-key integration's id, which is not an account. */
 const TEAM_INTEGRATION = "specter-team"
+/** The skill directories the package ships, read from disk: the test asserts what the plugin registers. */
+const REPO = fileURLToPath(new URL("../../", import.meta.url))
+const DISK_SKILLS = readdirSync(join(REPO, "skills"), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort()
 
 let calls = 0
 
@@ -98,6 +107,21 @@ describe("the plugin in a host", () => {
       await host.close()
     }
   }, 240_000)
+
+  test("registers every skills/*/SKILL.md in the real host", async () => {
+    const host = await startHost()
+    try {
+      const { data } = await host.client.skill.list({ location: host.location })
+      const ours = data
+        .map((skill) => ({ id: String(skill.id), path: String(skill.path) }))
+        .filter((skill) => DISK_SKILLS.includes(skill.id))
+        .sort((left, right) => left.id.localeCompare(right.id))
+      expect(ours.map((skill) => skill.id)).toEqual(DISK_SKILLS)
+      for (const skill of ours) expect(skill.path).toBe(join(REPO, "skills", skill.id, "SKILL.md"))
+    } finally {
+      await host.close()
+    }
+  }, 120_000)
 
   test("its own tools read Specter with the team key, spend credits, and never leak the key", async () => {
     const host = await startHost({ options: { access: "all", accounts: { work: {}, personal: {} } } })
