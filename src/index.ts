@@ -8,7 +8,7 @@ import { createHandlers, type ServerView } from "./handlers/index.js"
 import { manifest, version } from "./manifest.js"
 import { readOptions } from "./options.js"
 import { createProvider } from "./provider/specter.js"
-import { loadSkills } from "./skills.js"
+import { registerSkills } from "./skills.js"
 
 /** OpenCode's MCP servers, cut to the states status reports. */
 async function serversOf(ctx: Plugin.Context): Promise<readonly ServerView[]> {
@@ -39,10 +39,7 @@ export default Plugin.define({
 
     const accounts = await registerSpecterAccounts(ctx, manifest, options)
     const provider = createProvider({ key: accounts.key, timeoutMs: requestTimeoutMs })
-    const skills = await loadSkills()
-    const skillRegistration = await ctx.skill.transform((editor) => {
-      for (const info of skills) editor.add(info)
-    })
+    const skillRegistration = await registerSkills(ctx)
     const problems = [...accounts.problems]
 
     try {

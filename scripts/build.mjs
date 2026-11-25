@@ -3,14 +3,16 @@
 // plugin imports is bundled. NOTICE carries the licence of every bundled package, and the build fails when it no longer
 // matches what esbuild bundled (`--notice` rewrites it).
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { isBuiltin } from "node:module"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { build } from "esbuild"
 
 const root = fileURLToPath(new URL("../", import.meta.url))
 const dist = join(root, "dist")
+const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
 const HOST_PROVIDED = ["@opencode/plugin", "@opencode/plugin/*"]
-const allowed = (path) => path.startsWith("node:") || HOST_PROVIDED.some((name) => (name.endsWith("/*") ? path.startsWith(name.slice(0, -1)) : path === name))
+const allowed = (path) => isBuiltin(path) || HOST_PROVIDED.some((name) => (name.endsWith("/*") ? path.startsWith(name.slice(0, -1)) : path === name))
 
 const result = await build({
   absWorkingDir: root,
@@ -26,6 +28,8 @@ const result = await build({
   legalComments: "inline",
   metafile: true,
   logLevel: "warning",
+  // The YAML parser is CommonJS and reads `process` with require(); the bundle is ESM, so give it a real require.
+  banner: { js: `import { createRequire } from "node:module";\nconst require = createRequire(import.meta.url);\n// ${pkg.name} ${pkg.version}. Built by scripts/build.mjs; do not edit.` },
 })
 
 const unexpected = Object.values(result.metafile.outputs).flatMap((output) =>
