@@ -140,6 +140,10 @@ export const agentRules = async (host: Host) =>
 /** A session in the host's project, whose agent the host's rules are asserted against. */
 export const session = async (host: Host, agent = "build") => (await host.client.sessions.create({ agent, location: host.location })).id
 
+/** A session whose own rules are `permissions`, applied after the agent's. */
+export const sessionWithRules = async (host: Host, permissions: readonly Rule[], agent = "build") =>
+  (await host.client.sessions.create({ agent, permissions: permissions as never, location: host.location })).id
+
 /** One RPC call through the host's own transport: `POST /api/rpc/specter/<method>`. */
 export async function rpc(host: Host, method: string, input: unknown, sessionID?: string) {
   const id = sessionID ?? (await session(host))

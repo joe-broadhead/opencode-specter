@@ -101,7 +101,10 @@ one declaration, and `plugin-kit check` validates the manifest.
 - **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA` and `PROBE_SCHEMA` from `events`. Copying
   those shapes into the plugin is drift.
 - **Emit through `call.bus`** if the plugin ever writes; `register` builds the writer and only the manifest's declared
-  events are registered. Today the manifest declares none.
+  events are registered. Today the manifest declares none: the pass-through MCP tools are the vendor's own, this plugin
+  makes no provider write, and a nudge after one would need a per-request hook, which the standard bans.
+- **One gate.** Handlers rely on `register`'s one gate, which asserts `<name>.<method>` and each declared operation
+  `<alias>:<operation>`; they do not assert again.
 
 ## Adding a capability
 

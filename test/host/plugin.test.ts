@@ -3,7 +3,7 @@
 import { afterAll, describe, expect, test } from "bun:test"
 import { request as httpRequest } from "node:http"
 import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
-import { agentRules, cleanup, pluginState, rpc, session, specterServer, startHost, status, until, type Host } from "./harness.js"
+import { agentRules, cleanup, pluginState, rpc, session, sessionWithRules, specterServer, startHost, status, until, type Host } from "./harness.js"
 
 afterAll(cleanup)
 
@@ -182,19 +182,37 @@ describe("the plugin in a host", () => {
         60_000,
       )
       expect(signedIn.ok).toBe(true)
-      // OpenCode 2.4.1 probes `server/discover` first when the server declares no protocol. The 401 is the challenge that
-      // starts the sign-in. On this host the unauthenticated attempt then falls back to `initialize` once, also without a
-      // token; both are refused, and nothing is listed until the bearer is present.
-      const rpcs = host.fake.requests.flatMap((request) => (request.rpc === undefined ? [] : [request.rpc]))
-      const unauthenticated = host.fake.requests.flatMap((request) => (request.rpc === undefined || request.bearer ? [] : [request.rpc]))
-      expect(unauthenticated).toEqual(["server/discover", "initialize"])
-      expect(rpcs.slice(0, 2)).toEqual(["server/discover", "initialize"])
-      expect(host.fake.requests.filter((request) => request.rpc === "tools/list").every((request) => request.bearer)).toBe(true)
+      // OpenCode 2.4.1 probes `server/discover` first when the server declares no protocol, and the 401 is the challenge
+      // that starts the sign-in. The real host also sends one legacy `initialize` after that 401; standard §8 item 4 says
+      // no `initialize` follows. That is a host/standard discrepancy, recorded in the PR, not a plugin behaviour. The
+      // 401-final rule itself is proved against the contract's own harness in test/unit/mcp-probe.test.ts, so this host
+      // test asserts what the host must do: discover first, no unauthenticated `tools/list`, and a listing only with the
+      // bearer.
+      const requests = host.fake.requests.filter((request) => request.rpc !== undefined)
+      expect(requests.find((request) => !request.bearer)?.rpc).toBe("server/discover")
+      expect(requests.filter((request) => request.rpc === "tools/list" && !request.bearer)).toEqual([])
+      expect(requests.filter((request) => request.rpc === "tools/list").every((request) => request.bearer)).toBe(true)
       // The two invented tools are passed through under the server's name, and the generated rule treats them as changes.
       const rules = (await agentRules(host)).get("build") ?? []
       expect(rules).toContainEqual({ action: "specter-work_*", resource: "*", effect: "allow" })
       // The sign-in never touches the REST API or the team key.
       expect(host.fake.requests.filter((request) => request.path.startsWith("/api/") || request.apiKey)).toEqual([])
+    } finally {
+      await host.close()
+    }
+  }, 240_000)
+
+  test("register's one gate asserts each declared operation: a deny on default:companies.get refuses get_company", async () => {
+    const host = await startHost({ options: { access: "all", accounts: { work: {} } } })
+    try {
+      host.fake.keys.add(TEAM_KEY)
+      await host.client.integration.connect.key({ integrationID: TEAM_INTEGRATION, key: TEAM_KEY, label: "team", location: host.location } as never)
+      // `accounts: none` methods run as the register's internal `default` account, so that is the resource its gate names.
+      const sessionID = await sessionWithRules(host, [{ action: "specter.get_company", resource: "default:companies.get", effect: "deny" }])
+      const denied = await toolRun(host, sessionID, "get_company", { id: FAKE_COMPANY.id })
+      expect(denied.ok).toBe(false)
+      expect(!denied.ok && denied.error).toMatch(/PERMISSION_DENIED/)
+      expect(host.fake.requests.filter((request) => request.path === `/api/v1/companies/${FAKE_COMPANY.id}`)).toEqual([])
     } finally {
       await host.close()
     }

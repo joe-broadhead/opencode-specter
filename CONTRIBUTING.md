@@ -62,4 +62,4 @@ Versions follow semantic versioning. The first release is `v0.0.0`. Releases are
 `npx plugin-kit release 0.0.0` on a clean, level `master`, and CI publishes the GitHub release on the tag with `dist/`,
 `SHA256SUMS` and the conformance report. Never push a tag yourself.
 
-CI is one job, `ci`, on Node 24: it runs `npm ci --ignore-scripts` and `npm run check`.
+CI is one job, `ci`, on Ubuntu 24.04 with Node 24: it runs `npm ci --ignore-scripts` and `npm run check`.

@@ -17,17 +17,14 @@ Unofficial; not affiliated with Specter. Specter is a trademark of its owner, an
 
 ## Install
 
-The first release is `v0.0.0`, cut by the maintainer when this tree lands. There is no install from a checkout, and no
-earlier tag: until `v0.0.0` exists the line below has nothing to fetch.
-
-```sh
-opencode plugin add github:we-the-rebel-alliance/specter-plugin#v0.0.0
-```
+Install from a release: `opencode plugin add github:we-the-rebel-alliance/specter-plugin#v<version>`. The first release on
+plugin-contract is v0.0.0 (phase 4b). There is no install from a checkout and no earlier tag; until the maintainer cuts
+v0.0.0 there is no install, because the release tree must carry the built `dist/`.
 
 The same entry in `opencode.json`:
 
 ```json
-{ "plugins": ["github:we-the-rebel-alliance/specter-plugin#v0.0.0"] }
+{ "plugins": ["github:we-the-rebel-alliance/specter-plugin#v<version>"] }
 ```
 
 ## Sign in
@@ -51,7 +48,7 @@ Several accounts:
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0",
+      "package": "github:we-the-rebel-alliance/specter-plugin#v<version>",
       "options": { "accounts": { "work": {}, "personal": {} } }
     }
   ]

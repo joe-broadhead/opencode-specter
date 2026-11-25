@@ -16,6 +16,11 @@ Unofficial plugin. Not affiliated with Specter.
 `src/index.ts` wires doors 1–3 through `register(ctx, manifest, handlers)`; no handler adds a tool, registers an RPC method,
 evaluates a permission rule or checks an account. `register` validates every input and answer, resolves `account`, calls
 `ctx.permission.assert` once per call, applies the generated access rules and builds the bus from its one RPC registration.
+The gate asserts the method's action `<name>.<method>` and every operation the manifest declares on
+`<alias>:<operation>`; the handlers rely on that one gate and do not assert again.
+
+The manifest declares no bus events. The pass-through MCP tools are the vendor's own; this plugin makes no provider write,
+and a nudge after one would need a per-request hook, which the standard bans, so no `changed` event is declared.
 
 ## Accounts and sign-ins
 

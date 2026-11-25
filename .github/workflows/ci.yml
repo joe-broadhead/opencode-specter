@@ -16,7 +16,9 @@ concurrency:
 jobs:
   ci:
     name: ci
-    runs-on: ubuntu-24.04
+    # A pull request from a fork runs on the public runner only; a same-repository pull request, a push and a run by
+    # hand may use the org's runner when CI_RUNNER_PUBLIC is set.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.CI_RUNNER_PUBLIC || 'ubuntu-24.04') || 'ubuntu-24.04' }}
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
