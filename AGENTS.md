@@ -32,7 +32,7 @@ Node.js 24 or later; Bun 1.4 for the host and pack suites.
 | `npm ci --ignore-scripts` | installs dev tooling only; there are no runtime dependencies |
 | `npm run check` | every stage: typecheck, build, unit, conformance fixtures, host, pack, `plugin-kit check` |
 | `npm run typecheck` | `tsc` over `src/` and the tests |
-| `npm run build` | one self-contained `dist/index.js`, and the `NOTICE` check |
+| `npm run bundle` | one self-contained `dist/index.js`, and the `NOTICE` check; the committed `dist/` must match |
 | `npm test` | the unit tests |
 | `npm run conformance` | replays `fixtures/conformance.json` through the handlers |
 | `npm run test:host` | the built bundle in the real embedded OpenCode 2.4.1 host |
@@ -120,7 +120,7 @@ Hand-written text is plain English: short sentences, one term per concept.
 
 ## Forbidden
 
-- Editing `dist/` by hand, or committing it outside a release.
+- Editing the committed `dist/` by hand: regenerate it with `npm run bundle` and commit it with the change.
 - Adding runtime dependencies, peer dependencies or lifecycle scripts.
 - Naming any app in code, manifest or docs, except in an `x-<app>` key.
 - Copying contract code or kit scripts into this repository.

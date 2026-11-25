@@ -1,6 +1,6 @@
 // The packed tarball: what a person installs is the release tag's package, so the pack must carry the built server entry,
 // the skills and the icons, and importing its server entry must give the plugin definition. Run with Bun after `npm run
-// build`.
+// bundle`.
 import { afterAll, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"

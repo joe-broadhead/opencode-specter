@@ -19,7 +19,7 @@ const manifest = JSON.parse(readFileSync(join(SDK, "package.json"), "utf8")) as 
 /** The OpenCode release under test: the version of the SDK that runs the host. */
 export const SDK_VERSION = manifest.version
 
-if (!existsSync(join(REPO, "dist", "index.js"))) throw new Error("dist/ is missing. Run npm run build first.")
+if (!existsSync(join(REPO, "dist", "index.js"))) throw new Error("dist/ is missing. Run npm run bundle first.")
 
 export type Rule = { action: string; resource: string; effect: "allow" | "ask" | "deny" }
 

@@ -23,7 +23,7 @@ One command, `scripts/check.mjs`, runs every stage in order and stops at the fir
 | Stage | What it does |
 | --- | --- |
 | `typecheck` | `tsc` over `src/` and the tests. |
-| `build` | esbuild bundles `dist/index.js`, and checks `NOTICE`. |
+| `bundle` | esbuild bundles `dist/index.js`, checks `NOTICE`, and CI proves the committed `dist/` is current. |
 | `unit` | Vitest over `test/unit/`. |
 | `conformance` | Replays `fixtures/conformance.json` through the handlers, for two synthetic accounts. |
 | `host` | The built plugin in an embedded OpenCode 2.4.1 host, against a loopback fake. |
@@ -44,17 +44,8 @@ company, person, key or token.
 
 ## Running a checkout
 
-Build it, then point a plugin entry at the clone's path:
-
-```sh
-npm run build
-```
-
-```json
-{ "plugins": [{ "package": "/path/to/specter-plugin" }] }
-```
-
-A checkout is for development only; the install users run is the release tag.
+Bundle it with `npm run bundle` and run `npm run check`; `dist/` is committed, so a stale build fails CI. A checkout is
+for development only: it is not an install. The install users run is the release tag.
 
 ## Releases
 

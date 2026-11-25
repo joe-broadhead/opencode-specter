@@ -56,5 +56,7 @@ No private host module and no internal import.
 
 `scripts/build.mjs` bundles `src/index.ts` into one self-contained ESM file, `dist/index.js`, leaving only
 `@opencode/plugin` and Node built-ins external. The contract is a devDependency and is bundled; the kit is never bundled.
-`scripts/check.mjs` runs the plugin's typecheck, build, unit and conformance-fixture suites, the real 2.4.1 host suite,
-the pack suite and `plugin-kit check`.
+`dist/` is committed, because an OpenCode install of the tag runs no build: regenerate it with `npm run bundle`, and CI
+runs `npm run bundle && git diff --exit-code dist/` so a stale bundle fails. `scripts/check.mjs` runs the plugin's
+typecheck, bundle, unit and conformance-fixture suites, the real 2.4.1 host suite, the pack suite and
+`plugin-kit check`.
