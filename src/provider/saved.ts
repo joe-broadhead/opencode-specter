@@ -399,7 +399,7 @@ function withinCarry(position: Position, keep: ReadonlySet<string>): Position {
   }
   const passes: ((list: string[]) => boolean)[] = [(list) => dropFrom(list, HEAD, RECENT), (list) => dropFrom(list, 0, 0)]
   for (const pass of passes) {
-    while (carried > CARRY && (pass(d) || pass(k) || groups.some((group) => pass(group.h)))) continue
+    while (carried > CARRY && (pass(d) || pass(k) || groups.some((group) => pass(group.h)))) ;
   }
   return { ...position, k, d, P: groups.filter((group) => group.h.length > 0) }
 }

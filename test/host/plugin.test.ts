@@ -5,7 +5,7 @@ import { readdirSync } from "node:fs"
 import { request as httpRequest } from "node:http"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, PROTECTED_RESOURCE, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
+import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
 import { agentRules, cleanup, pluginState, rpc, session, sessionWithRules, specterServer, startHost, status, until, type Host } from "./harness.js"
 
 afterAll(cleanup)
@@ -232,7 +232,12 @@ describe("the plugin in a host", () => {
       // test asserts what the host must do: discover first, no unauthenticated `tools/list`, and a listing only with the
       // bearer.
       const requests = host.fake.requests.filter((request) => request.rpc !== undefined)
-      expect(requests.find((request) => !request.bearer)?.rpc).toBe("server/discover")
+      const unauthenticated = requests.filter((request) => !request.bearer).map((request) => request.rpc)
+      expect(unauthenticated[0]).toBe("server/discover")
+      // The real 2.4.1 host sends one legacy initialize after that 401; standard §8 item 4 says it should not. This is
+      // the host's known fallback, not a contract behaviour; the 401-final rule is proved against the contract's own
+      // harness in test/unit/mcp-probe.test.ts.
+      expect(unauthenticated).toContain("initialize")
       expect(requests.filter((request) => request.rpc === "tools/list" && !request.bearer)).toEqual([])
       expect(requests.filter((request) => request.rpc === "tools/list").every((request) => request.bearer)).toBe(true)
       // The two invented tools are passed through under the server's name, and the generated rule treats them as changes.

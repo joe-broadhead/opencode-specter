@@ -108,16 +108,18 @@ export function restTarget(input: Pick<RestInput, "path" | "query">, base = REST
     new ProviderError({ code: "INPUT_INVALID", what: `The path ${JSON.stringify(input.path.slice(0, 200))} ${why}`, next: "Pass a path relative to Specter's REST API, such as /companies." })
   const path = input.path
   if (!path.startsWith("/") || path.startsWith("//")) throw invalid("must start with a single /")
-  if (/[\s\\#?]|[\u0000-\u001f\u007f]/.test(path)) throw invalid("has characters a path cannot have; pass the query as query")
+  if (/[\s\\#?]/.test(path) || [...path].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) {
+    throw invalid("has characters a path cannot have; pass the query as query")
+  }
   let decoded = path
   for (let round = 0; round < 8; round++) {
-    const next = decoded.replace(/%[0-9A-Fa-f]{2}/g, (escape) => String.fromCharCode(Number.parseInt(escape.slice(1), 16)))
+    const next = decoded.replace(/%[0-9A-Fa-f]{2}/g, (sequence) => String.fromCharCode(Number.parseInt(sequence.slice(1), 16)))
     if (next === decoded) break
     decoded = next
   }
   if (decoded.split(/[/\\]/).some((segment) => segment === "." || segment === "..")) throw invalid("has a . or .. segment")
-  for (const escape of path.match(/%[0-9A-Fa-f]{2}/g) ?? []) {
-    if (PLAIN.test(String.fromCharCode(Number.parseInt(escape.slice(1), 16)))) throw invalid(`percent-encodes ${JSON.stringify(escape)}; write the character as itself`)
+  for (const hex of path.match(/%[0-9A-Fa-f]{2}/g) ?? []) {
+    if (PLAIN.test(String.fromCharCode(Number.parseInt(hex.slice(1), 16)))) throw invalid(`percent-encodes ${JSON.stringify(hex)}; write the character as itself`)
   }
   if (/%(?![0-9A-Fa-f]{2})/.test(path)) throw invalid("has a % that is not an escape")
   const root = new URL(base)

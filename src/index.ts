@@ -24,6 +24,8 @@ async function serversOf(ctx: Plugin.Context): Promise<readonly ServerView[]> {
       case "failed":
       case "needs_auth":
         return { name: server.name, state: server.status.status, error: server.status.error }
+      default:
+        return { name: server.name, state: "failed", error: "OpenCode reported an unknown MCP server state." }
     }
   })
 }

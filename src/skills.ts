@@ -12,12 +12,9 @@ const SKILLS = new URL("../skills/", import.meta.url)
 
 /** Every skill directory in the package, sorted. A directory without a SKILL.md is refused when it is read. */
 export async function skillIds(): Promise<readonly string[]> {
-  let entries
-  try {
-    entries = await readdir(fileURLToPath(SKILLS), { withFileTypes: true })
-  } catch {
+  const entries = await readdir(fileURLToPath(SKILLS), { withFileTypes: true }).catch(() => {
     throw invalid("The package's skills/ directory is missing or unreadable.")
-  }
+  })
   return entries
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
