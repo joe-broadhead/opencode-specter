@@ -49,7 +49,7 @@ src/index.ts             Plugin.define + one register call
 src/manifest.ts          capabilities, validated from the installed package.json
 src/accounts.ts          one Specter MCP server per alias, and the specter-team key integration
 src/options.ts           the options every stage reads (strict)
-src/skills.ts            reads and registers skills/<id>/SKILL.md
+src/skills.ts            parses SKILL.md YAML and registerSkills(ctx) registers every skill
 src/handlers/            one handler per method, plus the shared schemas
 src/provider/            the REST client, records, the saved-search cursor, and the one place a URL is named
 scripts/build.mjs        the one esbuild bundle

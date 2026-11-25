@@ -145,23 +145,32 @@ describe("the plugin in a host", () => {
     try {
       const { data } = await host.client.skill.list({ location: host.location })
       const ours = data
-        .map((skill) => ({ id: String(skill.id), path: String(skill.path), description: String(skill.description) }))
+        .map((skill) => ({
+          id: String(skill.id),
+          name: String(skill.name),
+          path: String(skill.path),
+          description: String(skill.description),
+          content: String(skill.content),
+        }))
         .filter((skill) => DISK_SKILLS.includes(skill.id))
         .sort((left, right) => left.id.localeCompare(right.id))
       expect(ours.map((skill) => skill.id)).toEqual(DISK_SKILLS)
       for (const skill of ours) {
-        expect(skill.path).toBe(join(REPO, "skills", skill.id, "SKILL.md"))
-        // The registered description is one plain line, never empty or a block-scalar marker the loader cannot read.
-        expect(skill.description, skill.id).not.toBe("")
-        expect(skill.description, skill.id).not.toBe(">")
-        expect(skill.description, skill.id).not.toBe("|")
-        expect(skill.description.startsWith("> ") || skill.description.startsWith("| "), skill.id).toBe(false)
-        // And it is exactly what the file's YAML frontmatter says.
-        const frontmatter = /^---\n([\s\S]*?)\n---/.exec(readFileSync(skill.path, "utf8"))
+        // The registered id, name, path, body and description are exactly what the file's YAML frontmatter says.
+        const text = readFileSync(skill.path, "utf8")
+        const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text)
         expect(frontmatter, skill.id).not.toBeNull()
-        const parsed = parseYaml(frontmatter![1]!) as { description?: unknown }
+        const parsed = parseYaml(frontmatter![1]!) as { name?: unknown; description?: unknown }
+        expect(typeof parsed.name, skill.id).toBe("string")
+        expect(skill.name, skill.id).toBe(parsed.name as string)
+        expect(skill.path, skill.id).toBe(join(REPO, "skills", skill.id, "SKILL.md"))
+        expect(skill.content, skill.id).toBe(text.slice(frontmatter![0].length).trim())
+        expect(skill.content.trim().length, skill.id).toBeGreaterThan(0)
+        // A block scalar's real text is compared here; the loader, not this test, refuses a bare marker.
         expect(typeof parsed.description, skill.id).toBe("string")
-        expect(skill.description, skill.id).toBe(parsed.description as string)
+        const description = parsed.description as string
+        expect(description.trim(), skill.id).not.toBe("")
+        expect(skill.description, skill.id).toBe(description)
       }
     } finally {
       await host.close()

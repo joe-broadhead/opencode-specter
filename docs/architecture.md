@@ -11,7 +11,7 @@ Unofficial plugin. Not affiliated with Specter.
 | Accounts | `src/accounts.ts` | One Specter MCP server per alias through the contract's `accounts` module, and the separate `specter-team` key integration. |
 | Handlers | `src/handlers/` | One handler per method: `status`, `probe`, `events_list`, `search_companies`, `get_company`, `list_saved_searches`, `saved_search_results`. |
 | Provider | `src/provider/` | The REST client (`request.ts`), Specter's records and previews (`companies.ts`), the saved-search cursor and gap (`saved.ts`), the client (`specter.ts`), and the one place its addresses and headers are named (`endpoints.ts`). |
-| Skills | `src/skills.ts` | Reads and validates `skills/<id>/SKILL.md`; setup registers each through `ctx.skill.transform`. |
+| Skills | `src/skills.ts` | Reads `skills/<id>/SKILL.md`, parses its frontmatter as YAML (block scalars included) and validates the name, description and body; setup calls `registerSkills(ctx)` once, which registers every skill through `ctx.skill.transform` and returns the disposer. |
 
 `src/index.ts` wires doors 1–3 through `register(ctx, manifest, handlers)`; no handler adds a tool, registers an RPC method,
 evaluates a permission rule or checks an account. `register` validates every input and answer, resolves `account`, calls
