@@ -487,6 +487,10 @@ export async function listEvents(input: unknown, options: ListingOptions): Promi
   // Everything on a page became visible by this read, so each event's occurred_at is this read's observation time.
   const screened = screenEvents(fresh.map((company) => toEvent(options.account, company, observedAt)))
   const fits = fitPage(screened.events, request.limit, MAX_BYTES)
+  // A page that cannot hold even one event is refused, never answered as an empty page with `more: false`.
+  if (screened.events.length > 0 && fits === 0) {
+    refuse("TOO_LARGE", `One event is larger than this source's ${MAX_BYTES}-byte page budget`, "Lower the event's size or raise the source's maxBytes; the read was not answered with a cut page.")
+  }
   const page = screened.events.slice(0, fits)
   // The page stops before the first event that does not fit: every company before it is consumed, none after it.
   const firstOut = screened.events[fits]?.external_id
