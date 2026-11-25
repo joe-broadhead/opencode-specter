@@ -92,15 +92,16 @@ estimate for a consumer's budget, never a Specter price.
 
 The `access` option generates default rules for every agent:
 
-| `access` | Free reads | Calls that may spend credits, and Specter's MCP tools |
-| --- | --- | --- |
-| `all` (default) | run | run |
-| `ask-changes` | run | ask |
-| `read-only` | run | denied |
+| `access` | Free reads | Credit-spending reads | Specter's MCP tools (write) |
+| --- | --- | --- | --- |
+| `all` (default) | run | ask | run |
+| `ask-changes` | run | ask | ask |
+| `read-only` | run | ask | denied |
 
 `get_company`, `saved_search_results` and `events_list` spend credits, so the manifest gives them `effect: ask`: they ask
-before running at every access level, including `all`. A refusal is `PERMISSION_DENIED`. The last matching rule wins, so
-an agent's own stricter rules and your saved approvals still win.
+before running at every access level, including `all`, and a refusal is `PERMISSION_DENIED`. Specter's MCP tools are
+declared `write` because their catalogue is not recorded, so they follow the change column. The last matching rule wins,
+so an agent's own stricter rules and your saved approvals still win.
 
 ## Capabilities
 

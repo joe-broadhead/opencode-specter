@@ -56,8 +56,10 @@ tools.specter.events_list({ account: "work", scope: { search: "5432" } })
 ```
 
 A page and its cursor belong to one account: a cursor issued for `work` read under `personal` is `CURSOR_INVALID`, never
-a silent restart. The plugin's own tools take no `account`; they use the team key and report `default` as their internal
-account.
+a silent restart. The four own REST tools (`search_companies`, `get_company`, `list_saved_searches`,
+`saved_search_results`) take no `account`; they use the team key and report `default` as their internal account.
+`events_list` and `probe` take the alias, because a page and a probe answer for one alias even though the data behind
+them is the team's.
 
 ## Team key limits
 
