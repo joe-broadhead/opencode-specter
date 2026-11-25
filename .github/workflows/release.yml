@@ -1,20 +1,28 @@
 name: release
 
-# The tag is cut by `plugin-kit release <version>` on a clean, level master and pushed by the maintainer. This workflow
-# builds that tag, checks it again, and publishes the GitHub release with dist/, the packed tarball, SHA256SUMS and the
-# conformance report attached. It never edits the tag or the version and never pushes elsewhere.
+# A tag v<package.json version> on a master commit whose CI passed creates the GitHub Release. Releases are not
+# published to npm: a consumer pins the tag, github:we-the-rebel-alliance/specter-plugin#v0.0.0, and dist/ is built
+# by this workflow. Only the owner decides a release; an agent never pushes a tag on its own.
+
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*"
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
-    name: publish the release
+    name: release
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -22,27 +30,35 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: package-lock.json
+          package-manager-cache: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
+          no-cache: true
+      - name: Fetch the contract over HTTPS
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       - run: npm ci --ignore-scripts
-      - name: Check the tagged tree
-        run: npm run check
-      - name: Keep the release files
+      - run: npm run check
+      - name: The tag names this package's version
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test "v${version}" = "$TAG"
+      - name: Pack the release files
+        run: |
+          set -euo pipefail
           mkdir -p release
+          npx plugin-kit check --json > release/conformance.json
           npm pack --ignore-scripts --pack-destination release
-          cp dist/index.js release/index.js
-          npx plugin-kit conformance --json > release/conformance-report.json
-      - name: Write SHA256SUMS
-        run: |
-          cd release
-          find . -type f ! -name SHA256SUMS | sed 's#^\./##' | sort | xargs sha256sum > SHA256SUMS
-          cat SHA256SUMS
-      - name: Publish the GitHub release
+          sha256sum release/*.tgz release/conformance.json > release/SHA256SUMS
+          cat release/SHA256SUMS
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-from-tag release/*
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" release/*.tgz release/conformance.json release/SHA256SUMS --repo "$REPO" --verify-tag --title "$TAG" --generate-notes

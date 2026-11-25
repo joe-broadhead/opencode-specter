@@ -2,7 +2,7 @@
 
 ## Setup
 
-- Node.js 22.19 or later, with npm. CI uses Node.js 24.
+- Node.js 24 or later, with npm. CI uses Node.js 24.
 - Bun 1.4 (CI uses 1.4.4). The host and pack suites run with `bun test`.
 - macOS or Linux.
 
@@ -32,8 +32,8 @@ One command, `scripts/check.mjs`, runs every stage in order and stops at the fir
 
 `npm run test:kit` runs the `kit` stage alone. `npm run docs` regenerates the generated doc sections.
 
-There are no copied kit scripts. `scripts/` holds only this plugin's build and check; `plugin-kit` owns the rest (see
-`AGENTS.md`).
+There are no shared kit scripts. `scripts/` holds only this plugin's build and check; `plugin-kit` owns conformance,
+generated docs, the forbidden scan and the doc file set.
 
 ## Fixtures
 

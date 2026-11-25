@@ -25,7 +25,7 @@ writes nothing to Specter and emits no bus events.
 
 ## Commands
 
-Node.js 22.19 or later; Bun 1.4 for the host and pack suites.
+Node.js 24 or later; Bun 1.4 for the host and pack suites.
 
 | Command | Does |
 |---|---|
@@ -62,10 +62,9 @@ test/support/            the invented Specter and the fixture helpers
 fixtures/conformance.json  two synthetic accounts, recorded and redacted
 ```
 
-There are no copied kit scripts. The copied kit (release, drift, copies, icons, forbidden, tested-hosts, capture-tools,
-native-manifest, changelog, `check-copies.mjs`, the family block) is deleted: `plugin-kit` owns those checks. In
-particular, the old `scripts/check-icons.mjs` and its shared `OWN_PACKAGES` list are gone; the manifest's `icons` are the
-one declaration, and `plugin-kit check` validates the manifest.
+There are no shared kit scripts. `scripts/` holds only this plugin's build and check; `plugin-kit` owns conformance,
+generated docs, the forbidden scan and the doc file set. The manifest's `icons` are the one icon declaration, and
+`plugin-kit check` validates the manifest.
 
 ## Rules
 

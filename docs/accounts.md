@@ -27,7 +27,7 @@ Add one entry to `options.accounts` per alias. Each alias becomes a server named
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/specter-plugin#v<version>",
+      "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0",
       "options": { "accounts": { "work": {}, "personal": {} } }
     }
   ]

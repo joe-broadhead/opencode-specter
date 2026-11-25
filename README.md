@@ -13,18 +13,19 @@ Unofficial; not affiliated with Specter. Specter is a trademark of its owner, an
 - A Specter seat for the per-person MCP sign-in.
 - For the plugin's own tools and the feed, API access for the team. The team's one API key is in Specter's
   [API Console](https://app.tryspecter.com/settings/api-console); API use is metered in credits.
-- Node.js 22.19 or later, and Bun 1.4, only to work on the plugin.
+- Node.js 24 or later, and Bun 1.4, only to work on the plugin.
 
 ## Install
 
-Install from a release: `opencode plugin add github:we-the-rebel-alliance/specter-plugin#v<version>`. The first release on
-plugin-contract is v0.0.0 (phase 4b). There is no install from a checkout and no earlier tag; until the maintainer cuts
-v0.0.0 there is no install, because the release tree must carry the built `dist/`.
+```sh
+opencode plugin add github:we-the-rebel-alliance/specter-plugin#v0.0.0
+```
 
-The same entry in `opencode.json`:
+The first release is `v0.0.0`, cut by the maintainer after this release pull request merges. There is no install from a
+checkout and no earlier tag. The same entry in `opencode.json`:
 
 ```json
-{ "plugins": ["github:we-the-rebel-alliance/specter-plugin#v<version>"] }
+{ "plugins": ["github:we-the-rebel-alliance/specter-plugin#v0.0.0"] }
 ```
 
 ## Sign in
@@ -48,7 +49,7 @@ Several accounts:
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/specter-plugin#v<version>",
+      "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0",
       "options": { "accounts": { "work": {}, "personal": {} } }
     }
   ]
@@ -99,6 +100,11 @@ The `access` option generates default rules for every agent:
 before running at every access level, including `all`, and a refusal is `PERMISSION_DENIED`. Specter's MCP tools are
 declared `write` because their catalogue is not recorded, so they follow the change column. The last matching rule wins,
 so an agent's own stricter rules and your saved approvals still win.
+
+## Options
+
+`access`, `accounts` and `requestTimeoutMs` are the only options, with their defaults in
+[Configuration](docs/configuration.md). An unknown key stops the plugin with `OPTIONS_INVALID`, which names it.
 
 ## Capabilities
 
@@ -161,6 +167,17 @@ Every failure reads `CODE: What happened. Next step: What to do.`
 | `UNAVAILABLE` | the provider could not be reached |
 <!-- /generated:errors -->
 
+## Troubleshooting
+
+Run `specter_status` first; it ends with one next step. The common ones:
+
+- `NEEDS_SIGN_IN`: run `/connect`, choose **Specter team API key** and paste a current team key.
+- A Specter MCP server that asks for a sign-in in `/mcps`: sign in again for that alias.
+- `ACCOUNT_REQUIRED` or `ACCOUNT_UNKNOWN`: name one of the aliases the next step lists.
+- `RATE_LIMITED`: Specter's rate limit or its credit budget stopped the read; wait for the period to renew.
+- `CURSOR_INVALID` or `CURSOR_EXPIRED`: read again with `since`; a gap page restarts at the earliest line Specter keeps.
+- `TOO_LARGE`: one event is larger than the source's page budget; lower `limit` or raise the source's `maxBytes`.
+
 ## Uninstall
 
 1. Sign out of each Specter server in `/mcps` (`specter`, or `specter-<alias>` for each account).
@@ -178,5 +195,6 @@ Every failure reads `CODE: What happened. Next step: What to do.`
 - [Security](docs/security.md)
 - [Contributing](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- [plugin-contract](https://github.com/we-the-rebel-alliance/plugin-contract)
 
 MIT licence; see [LICENSE](LICENSE).

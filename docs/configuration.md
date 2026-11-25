@@ -24,7 +24,7 @@ Ask before a change or a credit spend:
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/specter-plugin#v<version>",
+      "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0",
       "options": { "access": "ask-changes", "requestTimeoutMs": 60000 }
     }
   ]
@@ -37,7 +37,7 @@ Two accounts, each signed in separately in `/mcps`:
 {
   "plugins": [
     {
-      "package": "github:we-the-rebel-alliance/specter-plugin#v<version>",
+      "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0",
       "options": { "accounts": { "work": {}, "personal": {} } }
     }
   ]
