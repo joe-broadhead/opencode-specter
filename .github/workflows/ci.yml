@@ -32,6 +32,8 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
+          # The self-hosted runner's restored Bun cache lands outside its HOME, so download Bun instead.
+          no-cache: true
       # OpenCode installs plugins without lifecycle scripts, and no dev dependency needs them.
       - run: npm ci --ignore-scripts
       # Typecheck, build, unit, conformance fixtures, the real 2.4.1 host, pack, then `plugin-kit check`.
