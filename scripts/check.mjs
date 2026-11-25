@@ -12,6 +12,7 @@ const root = fileURLToPath(new URL("..", import.meta.url))
 const env = { ...process.env, PATH: `${join(root, "node_modules", ".bin")}${delimiter}${process.env.PATH ?? ""}` }
 
 const stages = {
+  lint: () => run("biome", ["check", "."]),
   typecheck: () => run("tsc", ["--noEmit", "-p", "tsconfig.json"]),
   bundle: () => run("node", ["scripts/build.mjs"]),
   unit: () => run("vitest", ["run", "test/unit"]),
@@ -19,6 +20,7 @@ const stages = {
   host: () => run("bun", ["test", "./test/host"]),
   pack: () => run("bun", ["test", "./test/pack"]),
   kit: () => run("plugin-kit", ["check"]),
+  docs: () => run("plugin-kit", ["docs", "--check"]),
 }
 
 const selected = process.argv.slice(2)

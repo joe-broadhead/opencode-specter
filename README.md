@@ -103,7 +103,7 @@ so an agent's own stricter rules and your saved approvals still win.
 
 ## Options
 
-`access`, `accounts` and `requestTimeoutMs` are the only options, with their defaults in
+`access`, `accounts`, `allowUntestedHost` and `requestTimeoutMs` are the only options, with their defaults in
 [Configuration](docs/configuration.md). An unknown key stops the plugin with `OPTIONS_INVALID`, which names it.
 
 ## Capabilities

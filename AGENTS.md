@@ -71,8 +71,8 @@ generated docs, the forbidden scan and the doc file set. The manifest's `icons` 
 1. **The manifest is the source of truth.** Add or change a method, source or action in `package.json` `capabilities`
    first, then its handler, then its tests. Never register a tool by hand: `contract.register` does it.
 2. **Every method takes the account** when it signs in to the provider. Never assume `default`. Resolve with the contract's
-   `accounts` module. The plugin's own tools are `accounts: none` and use the team key; the key is never a person's
-   account.
+   `accounts` module. The four own REST tools and `status` are `accounts: none` and use the team key; `events_list` and
+   `probe` are `accounts: optional` (the source account). The key is never a person's account.
 3. **Classify every method truthfully.** A delete is `delete`, a send is `send`, a share is `share`. If in doubt, choose the
    stricter class. `mcp:*` stays `write` until a live capture records Specter's MCP catalogue; never widen it to `read`
    without one.

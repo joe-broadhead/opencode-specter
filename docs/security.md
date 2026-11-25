@@ -39,9 +39,10 @@ which endpoints it may reach, and a `403 NOT_PERMITTED` says the plan excludes o
 
 ## Writes and grants
 
-The plugin writes nothing to Specter. It declares no actions and no plan/commit pair, so no action grant is needed. Every
-method is a read; the two that may spend credits, and the feed, either ask before running or are refused, as
-`docs/capabilities.md` describes.
+The plugin writes nothing to Specter. It declares no actions and no plan/commit pair, so no action grant is needed. The
+plugin's own methods are reads; Specter's pass-through MCP tools are the vendor's and declared `write` (changes), and the
+plugin makes no provider write itself. The two own methods that may spend credits, and the feed, either ask before
+running or are refused, as `docs/capabilities.md` describes.
 
 ## Reporting a vulnerability
 

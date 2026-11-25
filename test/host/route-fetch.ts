@@ -1,4 +1,4 @@
-// Replaces globalThis.fetch for this test process, as opencode-github's host tests do. OpenCode's MCP transport and the
+// Replaces globalThis.fetch for this test process, as the host tests do. OpenCode's MCP transport and the
 // plugin both call the global fetch at request time, so Specter's fixed hosts can be served by the loopback fake:
 // mcp.tryspecter.com (the MCP server and OAuth discovery) and app.tryspecter.com (the REST API). Loopback is allowed
 // only to the fake. Every other request fails with EXTERNAL_FETCH_BLOCKED and is recorded, so a test can assert that

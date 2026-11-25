@@ -21,6 +21,7 @@
     "NOTICE"
   ],
   "scripts": {
+    "lint": "biome check .",
     "check": "node scripts/check.mjs",
     "typecheck": "node scripts/check.mjs typecheck",
     "bundle": "node scripts/check.mjs bundle",
@@ -29,9 +30,11 @@
     "test:host": "node scripts/check.mjs host",
     "test:pack": "node scripts/check.mjs pack",
     "test:kit": "node scripts/check.mjs kit",
-    "docs": "plugin-kit docs"
+    "docs": "plugin-kit docs",
+    "docs:check": "plugin-kit docs --check"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.9",
     "@opencode/client": "2.4.1",
     "@opencode/plugin": "2.4.1",
     "@opencode/sdk": "2.4.1",

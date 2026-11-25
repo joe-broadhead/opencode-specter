@@ -37,8 +37,8 @@ for (const event of page.events) {
 return { state: { cursor: page.cursor } }
 ```
 
-- Call again with the new cursor when `page.more` is true; each call is one vendor read and spends credits for the
-  companies Specter returns.
+- Call again with the new cursor when `page.more` is true; after page 1 each call also reads a small overlap before the
+  page, so a poll can cost more credits than the new events it lists.
 - A `gap` is answered once. Apply the page, then read on with its cursor.
 - Events are metadata only: the company's id and name. Read a profile with `get_company`, which also spends credits.
 - The source's suggested cadence is in the table above; a faster timer costs credits, not freshness guarantees.
