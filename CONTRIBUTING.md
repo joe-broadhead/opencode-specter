@@ -2,8 +2,8 @@
 
 ## Setup
 
-- Node.js 22.12 or later, with npm. CI uses Node.js 24.
-- Bun 1.4 (CI uses 1.4.4). The conformance, host and pack tests run with `bun test`.
+- Node.js 22.19 or later, with npm. CI uses Node.js 24.
+- Bun 1.4 (CI uses 1.4.4). The host and pack suites run with `bun test`.
 - macOS or Linux.
 
 ```sh
@@ -15,9 +15,36 @@ npm run check
 
 No dependency needs install scripts, and OpenCode installs plugins without them, so always pass `--ignore-scripts`.
 
-### Run your checkout in OpenCode
+## `npm run check`
 
-Build it, then add the clone's path to `plugins` in your OpenCode config instead of the release install:
+One command, `scripts/check.mjs`, runs every stage in order and stops at the first failure.
+`node scripts/check.mjs <stage>...` runs only the named stages.
+
+| Stage | What it does |
+| --- | --- |
+| `typecheck` | `tsc` over `src/` and the tests. |
+| `build` | esbuild bundles `dist/index.js`, and checks `NOTICE`. |
+| `unit` | Vitest over `test/unit/`. |
+| `conformance` | Replays `fixtures/conformance.json` through the handlers, for two synthetic accounts. |
+| `host` | The built plugin in an embedded OpenCode 2.4.1 host, against a loopback fake. |
+| `pack` | Packs the tarball, installs it with scripts disabled and imports the server entry. |
+| `kit` | `plugin-kit check`: conformance (T0 and T1), generated docs, forbidden patterns, the doc file set and the bundled-kit check. |
+
+`npm run test:kit` runs the `kit` stage alone. `npm run docs` regenerates the generated doc sections.
+
+There are no copied kit scripts. `scripts/` holds only this plugin's build and check; `plugin-kit` owns the rest (see
+`AGENTS.md`).
+
+## Fixtures
+
+`fixtures/conformance.json` is recorded from the plugin's own handlers over an invented Specter, with two synthetic
+accounts. `test/conformance/` replays it. To change it, regenerate it from a test or the handler table, then run
+`npx plugin-kit record` and commit the redacted file; `npx plugin-kit record --check` must pass. Never commit a real
+company, person, key or token.
+
+## Running a checkout
+
+Build it, then point a plugin entry at the clone's path:
 
 ```sh
 npm run build
@@ -27,39 +54,12 @@ npm run build
 { "plugins": [{ "package": "/path/to/specter-plugin" }] }
 ```
 
-## `npm run check`
-
-One command, `scripts/check.mjs`, runs every stage in order and stops at the first failure. `node scripts/check.mjs
-<stage>...` runs only the named stages.
-
-| Stage | What it does |
-| --- | --- |
-| `typecheck` | `tsc` over `src/` and the tests. |
-| `unit` | Vitest over `test/unit/`. |
-| `conformance` | The source contract's conformance kit over the `specter.saved` source, under Bun. |
-| `build` | esbuild bundles `dist/index.js` and `dist/tui.js`, and checks `NOTICE`. |
-| `icons` | The family icon contract. |
-| `host` | The built plugin in an embedded OpenCode 2.4.1 host, against a loopback fake. |
-| `pack` | Packs, installs with scripts disabled and imports both entries. |
-| `forbidden` | The forbidden APIs and private names. |
-| `copies` | The shared kit files against their pinned hashes. |
-| `whitelist` | `package.json` and `dist/` against the approved package shape. |
-| `actionlint` | The workflows, when `actionlint` is on PATH. |
-
-## Capturing Specter's tools
-
-`npm run capture` (`scripts/capture-tools.mjs`) writes `test/fixtures/live-tools.json` from the signed-in server. Run
-it by hand, never in CI, and commit tool names and schemas only, no company data.
+A checkout is for development only; the install users run is the release tag.
 
 ## Releases
 
-Versions follow semantic versioning on the plugin's contract: its options, the server name `specter`, the
-`/specter-status` command, the status RPC, the skill names and the default rules.
+Versions follow semantic versioning. The first release is `v0.0.0`. Releases are cut by the maintainer with
+`npx plugin-kit release 0.0.0` on a clean, level `master`, and CI publishes the GitHub release on the tag with `dist/`,
+`SHA256SUMS` and the conformance report. Never push a tag yourself.
 
-Each release is the GitHub tag `v<version>`, made only by `.github/workflows/release.yml` after the owner approves the
-`release` environment; the copied release kit is replaced with `plugin-kit` when the contract lands. While changes
-land, their notes go under the unreleased section of `CHANGELOG.md`. `package.json` stays `"private": true` and in
-canonical form.
-
-CI is one job, `ci`, on Node 24: a pull request from a fork runs on `ubuntu-24.04`, and a same-repository pull request
-or a push may use the org runner when `CI_RUNNER_PUBLIC` is set. It runs `npm ci --ignore-scripts` and `npm run check`.
+CI is one job, `ci`, on Node 24: it runs `npm ci --ignore-scripts` and `npm run check`.

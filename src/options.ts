@@ -1,41 +1,23 @@
-// Plugin options. Strict: an option that is not listed here is refused with OPTIONS_INVALID rather than ignored, so a
-// typo cannot silently leave the plugin more open than the user meant. Every option is optional.
-import * as z from "zod"
-import { ACCESS_VALUES, type Access } from "./constants.js"
-import { SpecterPluginError } from "./errors.js"
+// The plugin's options, read strictly: an unknown key or a bad value is OPTIONS_INVALID, never silently ignored, so a
+// typo cannot leave the plugin more open than the person meant. `access` and `accounts` are the contract modules' own
+// (they refuse their invalid values); this file covers the plugin-specific ones and the unknown keys.
+/** The options the manifest declares, and nothing else. */
+const KNOWN_OPTIONS = new Set(["access", "accounts", "allowUntestedHost", "requestTimeoutMs"])
+/** The `requestTimeoutMs` bounds, as the manifest's options schema declares them. */
+export const TIMEOUT = { default: 30_000, min: 5_000, max: 120_000 } as const
 
-/**
- * The time limit for one request to Specter's REST API, in milliseconds. The shape is opencode-tavily's
- * `executionTimeoutMs`; the numbers are not a Specter fact (docs/configuration.md, `requestTimeoutMs`).
- */
-export const REQUEST_TIMEOUT = { default: 30_000, min: 5_000, max: 120_000 } as const
+export function optionsInvalid(reason: string): never {
+  throw new Error(`OPTIONS_INVALID: ${reason} Next step: fix the plugin's options in opencode.json, then reload OpenCode.`)
+}
 
-const OptionsSchema = z.strictObject({
-  /** What the generated default rules allow: everything, spend and changes ask, or free reads only. */
-  access: z.enum(ACCESS_VALUES).default("all"),
-  requestTimeoutMs: z
-    .number()
-    .int("use a whole number of milliseconds")
-    .min(REQUEST_TIMEOUT.min, `use at least ${REQUEST_TIMEOUT.min}`)
-    .max(REQUEST_TIMEOUT.max, `use at most ${REQUEST_TIMEOUT.max}`)
-    .default(REQUEST_TIMEOUT.default),
-  /** Run on an OpenCode version outside the tested range, with a warning in status. */
-  allowUntestedHost: z.boolean().default(false),
-})
-
-export type Options = z.output<typeof OptionsSchema> & { readonly access: Access }
-
-const EXAMPLE = `"plugins": [{ "package": "github:we-the-rebel-alliance/specter-plugin#v0.0.0", "options": { "access": "ask-changes" } }]`
-
-export function loadOptions(raw: unknown): Options {
-  const result = OptionsSchema.safeParse(raw ?? {})
-  if (result.success) return result.data
-  const issue = result.error.issues[0]
-  const path = issue?.code === "unrecognized_keys" ? issue.keys[0] : issue?.path.join(".")
-  const message = issue?.code === "unrecognized_keys" ? "this option does not exist" : (issue?.message ?? "invalid value")
-  throw new SpecterPluginError(
-    "OPTIONS_INVALID",
-    path ? `Invalid plugin option "${path}": ${message}.` : `Invalid plugin options: ${message}.`,
-    `Fix the plugin's options in opencode.json, for example ${EXAMPLE}.`,
-  )
+/** Reads the plugin's options, and names the one request setting it keeps. */
+export function readOptions(raw: Readonly<Record<string, unknown>>): { readonly requestTimeoutMs: number } {
+  for (const key of Object.keys(raw)) if (!KNOWN_OPTIONS.has(key)) optionsInvalid(`the option "${key}" does not exist.`)
+  const timeout = raw["requestTimeoutMs"]
+  if (timeout !== undefined && (typeof timeout !== "number" || !Number.isInteger(timeout) || timeout < TIMEOUT.min || timeout > TIMEOUT.max)) {
+    optionsInvalid(`requestTimeoutMs must be a whole number of milliseconds from ${TIMEOUT.min} to ${TIMEOUT.max}.`)
+  }
+  const allow = raw["allowUntestedHost"]
+  if (allow !== undefined && typeof allow !== "boolean") optionsInvalid("allowUntestedHost must be true or false.")
+  return { requestTimeoutMs: (timeout as number | undefined) ?? TIMEOUT.default }
 }

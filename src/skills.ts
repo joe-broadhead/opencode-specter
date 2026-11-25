@@ -1,8 +1,9 @@
-// Registers the plugin's hand-written skills. Each is read once at setup from the package's skills/<id>/SKILL.md.
+// The plugin's hand-written skills. Each is read once at setup from the package's skills/<id>/SKILL.md and registered
+// through OpenCode's public skill editor. A missing or malformed skill stops setup: the plugin's model-facing text is part
+// of it, not an optional extra.
 import { readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { type Plugin, Skill } from "@opencode/plugin"
-import { SpecterPluginError } from "./errors.js"
 
 export const SKILL_IDS = ["specter", "specter-write"] as const
 
@@ -25,8 +26,8 @@ export function parseSkill(id: string, text: string): ParsedSkill {
   return { name, description, content: match[2]!.trimStart() }
 }
 
-function invalid(message: string): SpecterPluginError {
-  return new SpecterPluginError("SKILLS_INVALID", message, "Reinstall the plugin.")
+function invalid(reason: string): Error {
+  return new Error(`UNAVAILABLE: ${reason} Next step: Reinstall the plugin.`)
 }
 
 export function skillPath(id: string): string {
