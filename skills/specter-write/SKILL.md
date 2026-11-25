@@ -1,6 +1,6 @@
 ---
 name: specter-write
-description: Before any Specter call that may spend credits: enriching a company, a saved search's results, or the specter.saved feed. Covers asking first, one call at a time, and reporting what was spent.
+description: "Before any Specter call that may spend credits: enriching a company, a saved search's results, or the specter.saved feed. Covers asking first, one call at a time, and reporting what was spent."
 ---
 
 # Spending credits

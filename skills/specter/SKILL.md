@@ -1,6 +1,6 @@
 ---
 name: specter
-description: Specter (tryspecter.com) deal data: resolve a company, read its profile, a saved search's matches and the specter.saved feed, and check setup. Not for a CRM's own records.
+description: "Specter (tryspecter.com) deal data: resolve a company, read its profile, a saved search's matches and the specter.saved feed, and check setup. Not for a CRM's own records."
 ---
 
 If Specter's tools are absent, run `/connect` and choose **Specter team API key** for the plugin's own tools, and sign in

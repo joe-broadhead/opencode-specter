@@ -28,4 +28,17 @@ describe("the plugin's skills", () => {
     expect(() => parseSkill("specter", "---\nname: specter\ndescription: x\nextra: y\n---\nBody\n")).toThrow(/needs exactly/)
     expect(() => parseSkill("specter", "---\nname: specter\ndescription: x\n---\n")).toThrow(/has no content/)
   })
+
+  test("a block-scalar or empty description is refused, not registered", () => {
+    for (const description of ["", ">", "|", "> folded text", "| literal text"]) {
+      const text = `---\nname: specter\ndescription: ${description}\n---\nBody\n`
+      expect(() => parseSkill("specter", text)).toThrow(/description/)
+    }
+  })
+
+  test("a quoted description is registered without its quotes", () => {
+    const quoted = parseSkill("specter", '---\nname: specter\ndescription: "Specter: a quoted line."\n---\nBody\n')
+    expect(quoted.description).toBe("Specter: a quoted line.")
+    expect(() => parseSkill("specter", '---\nname: specter\ndescription: "unclosed\n---\nBody\n')).toThrow(/unclosed/)
+  })
 })

@@ -33,11 +33,22 @@ export function parseSkill(id: string, text: string): ParsedSkill {
     fields.set(field[1]!, field[2]!.trim())
   }
   const name = fields.get("name")
-  const description = fields.get("description")
-  if (fields.size !== 2 || name !== id || !description) throw invalid(`skills/${id}/SKILL.md needs exactly a name equal to "${id}" and a description.`)
+  const description = unquote(id, fields.get("description"))
+  if (fields.size !== 2 || name !== id) throw invalid(`skills/${id}/SKILL.md needs exactly a name equal to "${id}" and a description.`)
+  if (!description) throw invalid(`skills/${id}/SKILL.md has an empty description; use one plain line.`)
+  if (description === ">" || description === "|" || description.startsWith("> ") || description.startsWith("| ")) {
+    throw invalid(`skills/${id}/SKILL.md has a block-scalar description (${JSON.stringify(description.slice(0, 2))}), which this parser does not read; use one plain line.`)
+  }
   const content = match[2]!.trim()
   if (content === "") throw invalid(`skills/${id}/SKILL.md has no content.`)
   return { name, description, content }
+}
+
+/** A one-line description may be bare or wrapped in matching quotes, which YAML frontmatter allows. */
+function unquote(id: string, value: string | undefined): string | undefined {
+  if (value === undefined || (value[0] !== '"' && value[0] !== "'")) return value
+  if (value.length < 2 || !value.endsWith(value[0]!)) throw invalid(`skills/${id}/SKILL.md has an unclosed quoted description.`)
+  return value.slice(1, -1)
 }
 
 function invalid(reason: string): Error {

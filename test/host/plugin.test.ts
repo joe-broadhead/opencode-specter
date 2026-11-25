@@ -1,10 +1,11 @@
 // The built plugin in an embedded OpenCode 2.4.1 host, against the loopback fake. Nothing leaves the machine: close()
 // fails the test if the host tried.
 import { afterAll, describe, expect, test } from "bun:test"
-import { readdirSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { request as httpRequest } from "node:http"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { parse as parseYaml } from "yaml"
 import { AUTHORIZATION_SERVER, FAKE_COMPANY, FAKE_SEARCHES, SPECTER_MCP_ORIGIN } from "./fake-specter.js"
 import { agentRules, cleanup, pluginState, rpc, session, sessionWithRules, specterServer, startHost, status, until, type Host } from "./harness.js"
 
@@ -108,6 +109,18 @@ describe("the plugin in a host", () => {
     }
   }, 240_000)
 
+  test("registers the default account as the specter MCP server", async () => {
+    const host = await startHost()
+    try {
+      await until("the default specter server is listed", () => specterServer(host, "specter"))
+      const { data } = await host.client.mcp.list({ location: host.location })
+      // No accounts option means one default account, whose server is the bare plugin name, never `specter-default`.
+      expect(data.map((server) => server.name).filter((name) => name === "specter" || name.startsWith("specter-"))).toEqual(["specter"])
+    } finally {
+      await host.close()
+    }
+  }, 240_000)
+
   test("parity: every own method is a host tool", async () => {
     const host = await startHost()
     try {
@@ -132,11 +145,24 @@ describe("the plugin in a host", () => {
     try {
       const { data } = await host.client.skill.list({ location: host.location })
       const ours = data
-        .map((skill) => ({ id: String(skill.id), path: String(skill.path) }))
+        .map((skill) => ({ id: String(skill.id), path: String(skill.path), description: String(skill.description) }))
         .filter((skill) => DISK_SKILLS.includes(skill.id))
         .sort((left, right) => left.id.localeCompare(right.id))
       expect(ours.map((skill) => skill.id)).toEqual(DISK_SKILLS)
-      for (const skill of ours) expect(skill.path).toBe(join(REPO, "skills", skill.id, "SKILL.md"))
+      for (const skill of ours) {
+        expect(skill.path).toBe(join(REPO, "skills", skill.id, "SKILL.md"))
+        // The registered description is one plain line, never empty or a block-scalar marker the loader cannot read.
+        expect(skill.description, skill.id).not.toBe("")
+        expect(skill.description, skill.id).not.toBe(">")
+        expect(skill.description, skill.id).not.toBe("|")
+        expect(skill.description.startsWith("> ") || skill.description.startsWith("| "), skill.id).toBe(false)
+        // And it is exactly what the file's YAML frontmatter says.
+        const frontmatter = /^---\n([\s\S]*?)\n---/.exec(readFileSync(skill.path, "utf8"))
+        expect(frontmatter, skill.id).not.toBeNull()
+        const parsed = parseYaml(frontmatter![1]!) as { description?: unknown }
+        expect(typeof parsed.description, skill.id).toBe("string")
+        expect(skill.description, skill.id).toBe(parsed.description as string)
+      }
     } finally {
       await host.close()
     }
@@ -225,6 +251,11 @@ describe("the plugin in a host", () => {
         60_000,
       )
       expect(signedIn.ok).toBe(true)
+      const vendorTools = (await host.probe().tool.list())
+        .map((tool) => tool.id)
+        .filter((id) => id.startsWith("specter-work_"))
+        .sort()
+      expect(vendorTools).toEqual(["specter-work_fake_other_tool", "specter-work_fake_read_tool"])
       // OpenCode 2.4.1 probes `server/discover` first when the server declares no protocol, and the 401 is the challenge
       // that starts the sign-in. The real host also sends one legacy `initialize` after that 401; standard §8 item 4 says
       // no `initialize` follows. That is a host/standard discrepancy, recorded in the PR, not a plugin behaviour. The
