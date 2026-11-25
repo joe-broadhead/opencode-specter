@@ -71,6 +71,23 @@ describe("the recorded conformance fixture", () => {
     await expect(handlers["events_list"]!.run({ source: "saved", scope: { search: SEARCHES.work }, cursor: work.cursor }, inventedCall("personal"))).rejects.toMatchObject({ code: "CURSOR_INVALID" })
   })
 
+  test("two companies at one observed timestamp are delivered once each across a page boundary", async () => {
+    const handlers = inventedHandlers()
+    const input = { source: "saved", scope: { search: SEARCHES.work }, since: "2026-11-19T09:00:00.000Z", limit: 1 }
+    const first = (await handlers["events_list"]!.run(input, inventedCall("work"))) as { readonly events: readonly { readonly external_id: string; readonly occurred_at: string }[]; readonly cursor: string; readonly more: boolean }
+    expect(first.events.map((event) => event.external_id)).toEqual(["company:hedgehog-co"])
+    expect(first.more).toBe(true)
+    const second = (await handlers["events_list"]!.run({ ...input, cursor: first.cursor, since: undefined }, inventedCall("work"))) as typeof first
+    expect(second.events.map((event) => event.external_id)).toEqual(["company:otter-co"])
+    // Both reads are observed at the same time: a timestamp-only cursor would skip the second event.
+    expect(second.events[0]!.occurred_at).toBe(first.events[0]!.occurred_at)
+    const third = (await handlers["events_list"]!.run({ ...input, cursor: second.cursor, since: undefined }, inventedCall("work"))) as typeof first
+    expect(third.events).toEqual([])
+    const delivered = [...first.events, ...second.events].map((event) => event.external_id)
+    expect(delivered).toEqual(["company:hedgehog-co", "company:otter-co"])
+    expect(new Set(delivered).size).toBe(delivered.length)
+  })
+
   test("the status answer is the handler's", async () => {
     const handlers = inventedHandlers()
     await expect(handlers["status"]!.run({}, inventedCall("work"))).resolves.toEqual(fixture.events.status)
