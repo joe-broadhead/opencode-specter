@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import { ProviderError } from "../../src/provider/errors.js"
 import { MAX_CURSOR_LENGTH } from "@we-the-rebel-alliance/plugin-contract/cursor"
+import type { RestInput } from "../../src/provider/request.js"
 import { type Read, cursorAt, hashOf, listEvents, maxCursorLength } from "../../src/provider/saved.js"
 import { FIXED_NOW, SAVED, SEARCHES, answer, savedRead } from "./helpers.js"
 
@@ -59,6 +60,21 @@ describe("the saved-search feed", () => {
     expect(third.more).toBe(false)
     // The poll still reads the overlap, so it can cost credits without listing anything.
     expect(third.cost).toEqual({ units: [{ per: "company", count: 2 }] })
+  })
+
+  test("a since filter is carried in the cursor, never replaced by the default window", async () => {
+    const calls: RestInput[] = []
+    const read = savedRead((input) => calls.push(input))
+    const since = "2026-11-19T09:00:00Z"
+    const first = await listEvents({ source: "saved", scope: { search: SEARCHES.work }, since, limit: 1 }, { open: open(read), now: FIXED_NOW, account: "work" })
+    const second = await listEvents({ source: "saved", scope: { search: SEARCHES.work }, cursor: first.cursor, limit: 1 }, { open: open(read), now: FIXED_NOW, account: "work" })
+    const third = await listEvents({ source: "saved", scope: { search: SEARCHES.work }, cursor: second.cursor, limit: 1 }, { open: open(read), now: FIXED_NOW, account: "work" })
+    expect(first.events.map((event) => event.external_id)).toEqual(["company:hedgehog-co"])
+    expect(second.events.map((event) => event.external_id)).toEqual(["company:otter-co"])
+    expect(third.events).toEqual([])
+    // Every vendor read names the first call's since, not a fresh 24-hour default: the filter lives in the cursor.
+    expect(calls.length).toBeGreaterThanOrEqual(2)
+    expect(calls.map((call) => call.query?.["new_results_after"]).every((cutoff) => cutoff === "2026-11-19T09:00:00.000Z")).toBe(true)
   })
 
   test("a watermark older than Specter's 60 days answers one gap, without a read", async () => {

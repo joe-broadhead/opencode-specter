@@ -16,6 +16,11 @@ Unofficial plugin. Not affiliated with Specter.
 `src/index.ts` wires doors 1–3 through `register(ctx, manifest, handlers)`; no handler adds a tool, registers an RPC method,
 evaluates a permission rule or checks an account. `register` validates every input and answer, resolves `account`, calls
 `ctx.permission.assert` once per call, applies the generated access rules and builds the bus from its one RPC registration.
+The gate asserts the method's action `<name>.<method>` and every operation the manifest declares on
+`<alias>:<operation>`; the handlers rely on that one gate and do not assert again.
+
+The manifest declares no bus events. The pass-through MCP tools are the vendor's own; this plugin makes no provider write,
+and a nudge after one would need a per-request hook, which the standard bans, so no `changed` event is declared.
 
 ## Accounts and sign-ins
 
@@ -51,5 +56,7 @@ No private host module and no internal import.
 
 `scripts/build.mjs` bundles `src/index.ts` into one self-contained ESM file, `dist/index.js`, leaving only
 `@opencode/plugin` and Node built-ins external. The contract is a devDependency and is bundled; the kit is never bundled.
-`scripts/check.mjs` runs the plugin's typecheck, build, unit and conformance-fixture suites, the real 2.4.1 host suite,
-the pack suite and `plugin-kit check`.
+`dist/` is committed, because an OpenCode install of the tag runs no build: regenerate it with `npm run bundle`, and CI
+runs `npm run bundle && git diff --exit-code dist/` so a stale bundle fails. `scripts/check.mjs` runs the plugin's
+typecheck, bundle, unit and conformance-fixture suites, the real 2.4.1 host suite, the pack suite and
+`plugin-kit check`.

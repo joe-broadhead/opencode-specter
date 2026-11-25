@@ -25,14 +25,14 @@ writes nothing to Specter and emits no bus events.
 
 ## Commands
 
-Node.js 22.19 or later; Bun 1.4 for the host and pack suites.
+Node.js 24 or later; Bun 1.4 for the host and pack suites.
 
 | Command | Does |
 |---|---|
 | `npm ci --ignore-scripts` | installs dev tooling only; there are no runtime dependencies |
 | `npm run check` | every stage: typecheck, build, unit, conformance fixtures, host, pack, `plugin-kit check` |
 | `npm run typecheck` | `tsc` over `src/` and the tests |
-| `npm run build` | one self-contained `dist/index.js`, and the `NOTICE` check |
+| `npm run bundle` | one self-contained `dist/index.js`, and the `NOTICE` check; the committed `dist/` must match |
 | `npm test` | the unit tests |
 | `npm run conformance` | replays `fixtures/conformance.json` through the handlers |
 | `npm run test:host` | the built bundle in the real embedded OpenCode 2.4.1 host |
@@ -62,10 +62,9 @@ test/support/            the invented Specter and the fixture helpers
 fixtures/conformance.json  two synthetic accounts, recorded and redacted
 ```
 
-There are no copied kit scripts. The copied kit (release, drift, copies, icons, forbidden, tested-hosts, capture-tools,
-native-manifest, changelog, `check-copies.mjs`, the family block) is deleted: `plugin-kit` owns those checks. In
-particular, the old `scripts/check-icons.mjs` and its shared `OWN_PACKAGES` list are gone; the manifest's `icons` are the
-one declaration, and `plugin-kit check` validates the manifest.
+There are no shared kit scripts. `scripts/` holds only this plugin's build and check; `plugin-kit` owns conformance,
+generated docs, the forbidden scan and the doc file set. The manifest's `icons` are the one icon declaration, and
+`plugin-kit check` validates the manifest.
 
 ## Rules
 
@@ -101,7 +100,10 @@ one declaration, and `plugin-kit check` validates the manifest.
 - **Reuse the output schemas.** `STATUS_SCHEMA` from `accounts`; `PAGE_SCHEMA` and `PROBE_SCHEMA` from `events`. Copying
   those shapes into the plugin is drift.
 - **Emit through `call.bus`** if the plugin ever writes; `register` builds the writer and only the manifest's declared
-  events are registered. Today the manifest declares none.
+  events are registered. Today the manifest declares none: the pass-through MCP tools are the vendor's own, this plugin
+  makes no provider write, and a nudge after one would need a per-request hook, which the standard bans.
+- **One gate.** Handlers rely on `register`'s one gate, which asserts `<name>.<method>` and each declared operation
+  `<alias>:<operation>`; they do not assert again.
 
 ## Adding a capability
 
@@ -118,7 +120,7 @@ Hand-written text is plain English: short sentences, one term per concept.
 
 ## Forbidden
 
-- Editing `dist/` by hand, or committing it outside a release.
+- Editing the committed `dist/` by hand: regenerate it with `npm run bundle` and commit it with the change.
 - Adding runtime dependencies, peer dependencies or lifecycle scripts.
 - Naming any app in code, manifest or docs, except in an `x-<app>` key.
 - Copying contract code or kit scripts into this repository.

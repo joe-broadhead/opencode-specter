@@ -1,6 +1,6 @@
 // The packed tarball: what a person installs is the release tag's package, so the pack must carry the built server entry,
 // the skills and the icons, and importing its server entry must give the plugin definition. Run with Bun after `npm run
-// build`.
+// bundle`.
 import { afterAll, describe, expect, test } from "bun:test"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { join } from "node:path"
@@ -32,7 +32,7 @@ describe("the packed plugin", () => {
     expect(manifest.name).toBe("@we-the-rebel-alliance/specter-plugin")
     expect(manifest.exports["./server"]).toBe("./dist/index.js")
     expect(manifest.dependencies).toBeUndefined()
-    for (const file of ["dist/index.js", "skills/specter/SKILL.md", "skills/specter-write/SKILL.md", "assets/icon.svg", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]) {
+    for (const file of ["dist/index.js", "skills/specter/SKILL.md", "skills/specter-write/SKILL.md", "assets/icon.svg", "README.md", "LICENSE", "NOTICE"]) {
       expect(existsSync(join(dir, file)), file).toBe(true)
     }
     for (const absent of ["src", "test", "scripts", "fixtures", "node_modules"]) expect(existsSync(join(dir, absent)), absent).toBe(false)

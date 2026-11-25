@@ -2,7 +2,7 @@
 // `node scripts/check.mjs <stage>...` runs only the named stages, in the order given.
 //
 // The stages are the plugin's own checks plus `plugin-kit check`, which runs conformance (T0 and T1 on every tested
-// host), the generated-doc drift, forbidden patterns, the doc file set and the bundled-kit check. `build` runs before
+// host), the generated-doc drift, forbidden patterns, the doc file set and the bundled-kit check. `bundle` runs before
 // `kit` and `host`: both load the built bundle.
 import { spawnSync } from "node:child_process"
 import { delimiter, join } from "node:path"
@@ -13,7 +13,7 @@ const env = { ...process.env, PATH: `${join(root, "node_modules", ".bin")}${deli
 
 const stages = {
   typecheck: () => run("tsc", ["--noEmit", "-p", "tsconfig.json"]),
-  build: () => run("node", ["scripts/build.mjs"]),
+  bundle: () => run("node", ["scripts/build.mjs"]),
   unit: () => run("vitest", ["run", "test/unit"]),
   conformance: () => run("vitest", ["run", "test/conformance"]),
   host: () => run("bun", ["test", "./test/host"]),

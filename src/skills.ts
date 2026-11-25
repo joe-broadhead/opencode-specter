@@ -1,13 +1,28 @@
-// The plugin's hand-written skills. Each is read once at setup from the package's skills/<id>/SKILL.md and registered
+// The plugin's hand-written skills. Every `skills/<id>/SKILL.md` in the package is read once at setup and registered
 // through OpenCode's public skill editor. A missing or malformed skill stops setup: the plugin's model-facing text is part
 // of it, not an optional extra.
-import { readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { type Plugin, Skill } from "@opencode/plugin"
 
-export const SKILL_IDS = ["specter", "specter-write"] as const
-
 type ParsedSkill = { readonly name: string; readonly description: string; readonly content: string }
+
+/** The skills directory of the installed package; `dist/index.js` and `src/skills.ts` both sit one level below it. */
+const SKILLS = new URL("../skills/", import.meta.url)
+
+/** Every skill directory in the package, sorted. A directory without a SKILL.md is refused when it is read. */
+export async function skillIds(): Promise<readonly string[]> {
+  let entries
+  try {
+    entries = await readdir(fileURLToPath(SKILLS), { withFileTypes: true })
+  } catch {
+    throw invalid("The package's skills/ directory is missing or unreadable.")
+  }
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+}
 
 /** Parses the frontmatter strictly: exactly `name` (equal to the folder) and a one-line `description`. */
 export function parseSkill(id: string, text: string): ParsedSkill {
@@ -23,7 +38,9 @@ export function parseSkill(id: string, text: string): ParsedSkill {
   const name = fields.get("name")
   const description = fields.get("description")
   if (fields.size !== 2 || name !== id || !description) throw invalid(`skills/${id}/SKILL.md needs exactly a name equal to "${id}" and a description.`)
-  return { name, description, content: match[2]!.trimStart() }
+  const content = match[2]!.trim()
+  if (content === "") throw invalid(`skills/${id}/SKILL.md has no content.`)
+  return { name, description, content }
 }
 
 function invalid(reason: string): Error {
@@ -31,14 +48,16 @@ function invalid(reason: string): Error {
 }
 
 export function skillPath(id: string): string {
-  return fileURLToPath(new URL(`../skills/${id}/SKILL.md`, import.meta.url))
+  return fileURLToPath(new URL(`${id}/SKILL.md`, SKILLS))
 }
 
-type SkillContext = { readonly skill: Pick<Plugin.Context["skill"], "transform"> }
+type SkillDomain = Pick<Plugin.Context["skill"], "transform">
 
-export async function registerSkills(ctx: SkillContext): Promise<{ dispose(): Promise<void> }> {
+/** Reads every skill directory and registers each SKILL.md through the host's skill editor. */
+export async function registerSkills(skill: SkillDomain): Promise<{ dispose(): Promise<void> }> {
+  const ids = await skillIds()
   const skills = await Promise.all(
-    SKILL_IDS.map(async (id) => {
+    ids.map(async (id) => {
       const path = skillPath(id)
       const text = await readFile(path, "utf8").catch(() => {
         throw invalid(`skills/${id}/SKILL.md is missing or unreadable.`)
@@ -46,7 +65,7 @@ export async function registerSkills(ctx: SkillContext): Promise<{ dispose(): Pr
       return { id, path, ...parseSkill(id, text) }
     }),
   )
-  return ctx.skill.transform((editor) => {
+  return skill.transform((editor) => {
     for (const skill of skills) {
       editor.add({
         id: Skill.ID.make(skill.id),

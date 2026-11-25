@@ -133,7 +133,7 @@ describe("the handler table", () => {
     const company = (await handlers["get_company"]!.run({ id: "hedgehog-co" }, call("default"))) as { company: { id: string }; cost: { credits: number } }
     expect(company.company.id).toBe("hedgehog-co")
     expect(company.cost.credits).toBe(1)
-    expect(await handlers["list_saved_searches"]!.run({}, call("default"))).toEqual({ options: [{ id: SEARCHES.work, label: "Bristol software (company, 2 new, 2 total)" }], cost: { credits: 0 }, trust: "untrusted" })
+    expect(await handlers["list_saved_searches"]!.run({}, call("default"))).toEqual({ options: [{ id: SEARCHES.work, label: "Bristol software (company, 2 new, 2 total)" }] })
     const results = (await handlers["saved_search_results"]!.run({ searchId: SEARCHES.work }, call("default"))) as Record<string, unknown>
     expect(results).toMatchObject({ searchId: SEARCHES.work, page: 0, limit: 25, truncated: false, cost: { credits: 1 } })
   })

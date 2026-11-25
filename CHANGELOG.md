@@ -1,38 +1,37 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## 0.0.0 (2026-11-25)
 
-## [0.0.0]
+The first release, on OpenCode `>=2.4.1 <2.5.0` (tested on 2.4.1) and plugin-contract v0.
 
-The first release: the repository at its new name, on OpenCode 2.4.1, rebuilt on plugin-contract v0. It is ready for
-`v0.0.0`, which the maintainer cuts after this tree lands.
-
-### Added
-
-- The `capabilities` manifest: the plugin `specter`, accounts through Specter's hosted MCP server, one events source
-  (`specter.saved`, metered per company) and the seven methods, including Specter's pass-through MCP tools as `mcp:*`.
-- Accounts: several aliases at once, each a separate `specter`/`specter-<alias>` MCP sign-in, plus the separate
-  `specter-team` integration for the team's API key. The plugin's own tools are `accounts: none` and always use the team
-  key.
-- Every method on every door through one `register` call: the agent tool, Code Mode and RPC.
-- `status` from the contract's status builder, `probe` over the team key's fingerprint, and `events_list` over the
-  saved-search feed with a cursor bound to plugin, source, account and scope.
-- The saved-search feed keeps a compatible cursor for 60 days, answers one `gap` when Specter's window has passed, and
-  holds its cursor when a page is cut or malformed.
-- Unit, conformance (two synthetic accounts), real 2.4.1 host and pack suites; `plugin-kit check` in CI.
-
-### Changed
-
-- The package is `@we-the-rebel-alliance/specter-plugin` and the plugin id, tool namespace and RPC id are `specter`.
+- One manifest (`capabilities` in `package.json`) and one `register` call wiring the seven methods through the agent
+  tool, Code Mode and RPC: `status`, `probe`, `events_list`, `search_companies`, `get_company`, `list_saved_searches`
+  and `saved_search_results`.
+- Accounts through Specter's hosted MCP server, one server per alias (`specter`, `specter-<alias>`), with a separate
+  `specter-team` integration for the team API key. The plugin's own tools are `accounts: none`.
+- The `specter.saved` events source: companies added to one saved company search, with a cursor bound to plugin, source,
+  account and scope, a 60-day gap, and a metered cost per company.
+- Specter's own MCP tools passed through as `mcp:*`, classified `write` because their catalogue is not recorded yet.
 - `get_company`, `saved_search_results` and `events_list` are reads with `effect: ask`: they spend the team's credits and
   ask before running at every access level.
-- The copied kit is deleted; `plugin-kit` runs conformance, generated docs, forbidden patterns and the doc file set, and
-  `scripts/` holds only this plugin's build and check.
+- Generated docs from the manifest, two skills (`specter`, `specter-write`), unit, conformance, real 2.4.1 host and pack
+  tests, and `plugin-kit check` in CI.
 
-### Removed
+### Removed since v0.0.1
 
-- The old tools RPC, the manual permission defaults, the manual status RPC and TUI, the contract-1 code, the old
-  family-only package keys (`sources`, `opencode` and the app block), and the copied release, drift, copies, icons,
-  forbidden, tested-hosts, capture-tools, native-manifest and changelog scripts.
+- The `/specter-status` command and the TUI status view. `status` is now the contract's `specter_status` tool and the
+  `specter` RPC method, so there is no app-specific command or TUI to keep.
+- The status RPC id `specter.deals` and the tools RPC `specter.deals.tools`, including `describe`. The contract's one RPC
+  id is `specter`, with one method per declared tool; `describe` is diagnostics only under contract §18.
+- The key integration id `specter`. The team key is `specter-team`, so the per-alias MCP servers keep the names
+  `specter` and `specter-<alias>`.
+- The `NOT_RELEASED` source-install gate. Installs come only from release tags with the committed `dist/`; there is no
+  source install left to gate.
+- The old status surface: the free key check (accepted/rejected/unconfirmed), the MCP credit-use line, a user-configured
+  server's adoption/conflict report, the visible/unknown MCP tool counts, shadowed-skill reporting, the permissions
+  block and the untested-host warning. The contract's `statusAnswer` reports the manifest, the host range, each alias's
+  MCP server state, the unguarded agents and one next step, and makes no upstream call; cost stays in the manifest.
+- The bespoke MCP server adoption and conflict handling. The contract's `accounts` module registers one server per alias.
+- The shared kit scripts (release, drift, copies, icons, forbidden, tested-hosts, capture-tools, native-manifest and
+  changelog), the old app-specific package key, the `opencode` key and the top-level `sources` key, contract-1 code, the
+  old `./tui` export and the TUI module. `plugin-kit` owns the shared checks, and `capabilities` is the one manifest.

@@ -6,7 +6,7 @@ import type { ApiOutput } from "./request.js"
 import { API_CONSOLE_URL, SUPPORT_EMAIL } from "./endpoints.js"
 
 /** The contract codes a Specter failure maps to. */
-export type ProviderCode = "NEEDS_SIGN_IN" | "RATE_LIMITED" | "BUDGET_EXCEEDED" | "CURSOR_EXPIRED" | "CURSOR_INVALID" | "INPUT_INVALID" | "SOURCE_UNKNOWN" | "UNAVAILABLE"
+export type ProviderCode = "NEEDS_SIGN_IN" | "RATE_LIMITED" | "BUDGET_EXCEEDED" | "CURSOR_EXPIRED" | "CURSOR_INVALID" | "INPUT_INVALID" | "SOURCE_UNKNOWN" | "TOO_LARGE" | "UNAVAILABLE"
 
 /**
  * A refusal from the provider layer. It carries `code`, `what` and `next` in the contract's form, so `register` maps it

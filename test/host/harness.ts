@@ -19,7 +19,7 @@ const manifest = JSON.parse(readFileSync(join(SDK, "package.json"), "utf8")) as 
 /** The OpenCode release under test: the version of the SDK that runs the host. */
 export const SDK_VERSION = manifest.version
 
-if (!existsSync(join(REPO, "dist", "index.js"))) throw new Error("dist/ is missing. Run npm run build first.")
+if (!existsSync(join(REPO, "dist", "index.js"))) throw new Error("dist/ is missing. Run npm run bundle first.")
 
 export type Rule = { action: string; resource: string; effect: "allow" | "ask" | "deny" }
 
@@ -139,6 +139,10 @@ export const agentRules = async (host: Host) =>
 
 /** A session in the host's project, whose agent the host's rules are asserted against. */
 export const session = async (host: Host, agent = "build") => (await host.client.sessions.create({ agent, location: host.location })).id
+
+/** A session whose own rules are `permissions`, applied after the agent's. */
+export const sessionWithRules = async (host: Host, permissions: readonly Rule[], agent = "build") =>
+  (await host.client.sessions.create({ agent, permissions: permissions as never, location: host.location })).id
 
 /** One RPC call through the host's own transport: `POST /api/rpc/specter/<method>`. */
 export async function rpc(host: Host, method: string, input: unknown, sessionID?: string) {

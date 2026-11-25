@@ -6,7 +6,7 @@ Only the latest release is supported.
 
 ## Reporting a vulnerability
 
-Report a vulnerability privately through GitHub's security advisories for this repository, not in a public issue.
+Report a vulnerability through GitHub's private vulnerability reporting on this repository. Do not open a public issue with a credential, a team API key or a person's data in it.
 
 ## Data handling
 
