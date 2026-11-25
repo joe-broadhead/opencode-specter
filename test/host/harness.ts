@@ -1,7 +1,7 @@
-// An embedded OpenCode host from the public @opencode/sdk, with no listener and no private host source, as in
-// opencode-github's host tests. The plugin is loaded the way a user loads it: a config `plugins` entry that points at
-// this package (its built dist/) with options. A probe plugin lends its context to the tests. Specter is the loopback
-// fake behind the fetch router, and any other request fails the host's close().
+// An embedded OpenCode host from the public @opencode/sdk, with no listener and no private host source. The plugin is
+// loaded the way a person loads it: a config `plugins` entry that points at this package (its built dist/) with options.
+// A probe plugin lends its context to the tests. Specter is the loopback fake behind the fetch router, and any other
+// request fails the host's close().
 //
 // Host version: the SDK in devDependencies (2.4.1), the one tested release.
 import { ROOT } from "./isolate.js"
@@ -10,12 +10,8 @@ import { join } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { OpenCodeClient } from "@opencode/client"
 import { Plugin } from "@opencode/plugin"
-import { PLUGIN_ID, SERVER_NAME } from "../../src/constants.js"
 import { type FakeOptions, startFakeSpecter } from "./fake-specter.js"
 import { routeFetch } from "./route-fetch.js"
-
-import { simulateTaggedRelease } from "../../src/release.js"
-import { SpecterRpc, type Status } from "../../src/rpc.js"
 
 const REPO = realpathSync(fileURLToPath(new URL("../../", import.meta.url)))
 const SDK = join(REPO, "node_modules", "@opencode", "sdk")
@@ -50,7 +46,7 @@ const probe = Plugin.define({
 })
 
 export interface HostInput {
-  /** Plugin options, as a user writes them in opencode.json. */
+  /** Plugin options, as a person writes them in opencode.json. */
   readonly options?: Record<string, unknown>
   /** Extra user config, such as permissions, agents or mcp. Receives the fake's origin. */
   readonly config?: (origin: string) => Record<string, unknown>
@@ -63,9 +59,6 @@ export interface HostInput {
 let hosts = 0
 
 export async function startHost(input: HostInput = {}) {
-  // This harness loads the package as a local path, which is not a tagged release. Simulate one so the existing
-  // handlers still run against the loopback fake. Production does not set this.
-  simulateTaggedRelease(true)
   const base = join(ROOT, `host-${++hosts}`)
   const work = join(base, "work")
   mkdirSync(work, { recursive: true })
@@ -104,8 +97,8 @@ export async function startHost(input: HostInput = {}) {
       router.target = undefined
       router.retired.add(fake.origin)
       await fake.close()
-      // OpenCode probes a remote server's OAuth metadata (`/.well-known/…`) itself; any other request off the machine
-      // is the failure.
+      // OpenCode probes a remote server's OAuth metadata (`/.well-known/…`) itself; any other request off the machine is
+      // the failure.
       const blocked = router.blocked.slice(blockedBefore).filter((url) => !/\/\.well-known\//.test(url))
       if (blocked.length > 0) throw new Error(`the host tried to leave the machine: ${[...new Set(blocked)].join(", ")}`)
     },
@@ -133,12 +126,12 @@ export async function until<T>(what: string, check: () => Promise<T | false | un
 
 export async function pluginState(host: Host) {
   const { data } = await host.client.plugin.list({ location: host.location })
-  return data.find((plugin) => plugin.id === PLUGIN_ID)?.state
+  return data.find((plugin) => plugin.id === "specter")?.state
 }
 
-export async function specterServer(host: Host) {
+export async function specterServer(host: Host, name = "specter") {
   const { data } = await host.client.mcp.list({ location: host.location })
-  return data.find((server) => server.name === SERVER_NAME)
+  return data.find((server) => server.name === name)
 }
 
 export const agentRules = async (host: Host) =>
@@ -147,6 +140,17 @@ export const agentRules = async (host: Host) =>
 /** A session in the host's project, whose agent the host's rules are asserted against. */
 export const session = async (host: Host, agent = "build") => (await host.client.sessions.create({ agent, location: host.location })).id
 
-/** The status RPC, called through the probe plugin's context, as opencode-github's host tests call theirs. */
-export const status = (host: Host) => host.probe().rpc(SpecterRpc).status({}) as Promise<Status>
+/** One RPC call through the host's own transport: `POST /api/rpc/specter/<method>`. */
+export async function rpc(host: Host, method: string, input: unknown, sessionID?: string) {
+  const id = sessionID ?? (await session(host))
+  try {
+    const answer = await host.client.rpc.call({ rpcID: "specter", method, input: { sessionID: id, input } as never, location: host.location })
+    return { ok: true as const, output: answer?.output }
+  } catch (error) {
+    const failure = error as { type?: string; message?: string; data?: { code?: string } }
+    return { ok: false as const, code: failure.data?.code ?? failure.type ?? "UNAVAILABLE", message: failure.message ?? String(error) }
+  }
+}
 
+/** The status answer, over RPC. */
+export const status = (host: Host) => rpc(host, "status", {}) as Promise<{ ok: true; output: Record<string, unknown> } | { ok: false; code: string; message: string }>

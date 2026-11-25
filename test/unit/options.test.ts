@@ -1,28 +1,20 @@
-import { describe, expect, it } from "vitest"
-import { loadOptions, REQUEST_TIMEOUT } from "../../src/options.js"
+import { describe, expect, test } from "vitest"
+import { TIMEOUT, readOptions } from "../../src/options.js"
 
-describe("options", () => {
-  it("defaults: access all (D1), the request time limit, and no untested hosts", () => {
-    expect(loadOptions(undefined)).toEqual({ access: "all", requestTimeoutMs: REQUEST_TIMEOUT.default, allowUntestedHost: false })
-    expect(loadOptions({})).toEqual(loadOptions(undefined))
+describe("the plugin's options", () => {
+  test("the defaults need no options at all", () => {
+    expect(readOptions({})).toEqual({ requestTimeoutMs: TIMEOUT.default })
   })
 
-  it("takes every documented value", () => {
-    expect(loadOptions({ access: "read-only", requestTimeoutMs: REQUEST_TIMEOUT.max, allowUntestedHost: true })).toEqual({
-      access: "read-only",
-      requestTimeoutMs: REQUEST_TIMEOUT.max,
-      allowUntestedHost: true,
-    })
+  test("the one request setting is read within the manifest's bounds", () => {
+    expect(readOptions({ requestTimeoutMs: 60_000 })).toEqual({ requestTimeoutMs: 60_000 })
+    expect(() => readOptions({ requestTimeoutMs: 1000 })).toThrow(/OPTIONS_INVALID: requestTimeoutMs must be a whole number/)
+    expect(() => readOptions({ requestTimeoutMs: 120_001 })).toThrow(/OPTIONS_INVALID/)
+    expect(() => readOptions({ requestTimeoutMs: 1.5 })).toThrow(/OPTIONS_INVALID/)
   })
 
-  it("refuses an unknown option with OPTIONS_INVALID, naming it", () => {
-    expect(() => loadOptions({ acess: "all" })).toThrow(/^OPTIONS_INVALID: Invalid plugin option "acess": this option does not exist\. Next step: /)
-  })
-
-  it("refuses a wrong value with OPTIONS_INVALID", () => {
-    expect(() => loadOptions({ access: "read" })).toThrow(/OPTIONS_INVALID/)
-    expect(() => loadOptions({ requestTimeoutMs: "30000" })).toThrow(/OPTIONS_INVALID/)
-    expect(() => loadOptions({ allowUntestedHost: "yes" })).toThrow(/OPTIONS_INVALID/)
-    expect(() => loadOptions([])).toThrow(/OPTIONS_INVALID/)
+  test("an unknown option stops the plugin rather than being ignored", () => {
+    expect(() => readOptions({ acess: "all" })).toThrow(/OPTIONS_INVALID: the option "acess" does not exist/)
+    expect(() => readOptions({ allowUntestedHost: "yes" })).toThrow(/allowUntestedHost must be true or false/)
   })
 })

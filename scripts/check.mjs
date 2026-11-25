@@ -1,54 +1,24 @@
 // The one local entry point: `npm run check` runs every stage in order and stops at the first failure.
 // `node scripts/check.mjs <stage>...` runs only the named stages, in the order given.
+//
+// The stages are the plugin's own checks plus `plugin-kit check`, which runs conformance (T0 and T1 on every tested
+// host), the generated-doc drift, forbidden patterns, the doc file set and the bundled-kit check. `build` runs before
+// `kit` and `host`: both load the built bundle.
 import { spawnSync } from "node:child_process"
-import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { delimiter, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const root = fileURLToPath(new URL("..", import.meta.url))
 const env = { ...process.env, PATH: `${join(root, "node_modules", ".bin")}${delimiter}${process.env.PATH ?? ""}` }
-// The one list of tested OpenCode releases. Node loads src/constants.ts by stripping its types, so that file keeps to
-// type-only imports.
-const { TESTED_HOSTS } = await import(new URL("../src/constants.ts", import.meta.url).href)
-
-// The approved package shape. Change it here only together with the release policy.
-// NOTICE carries the licences of the bundled packages (scripts/build.mjs checks it), as in opencode-github.
-const FILES = ["dist", "assets/icon.svg", "assets/icon-128.png", "assets/icon-256.png", "skills", "README.md", "LICENSE", "NOTICE", "CHANGELOG.md"]
-// The entries in opencode-github's form, `{ "default": <file> }`; the icons as plain paths.
-const EXPORTS = {
-  ".": { default: "./dist/index.js" },
-  "./tui": { default: "./dist/tui.js" },
-  "./icon.svg": "./assets/icon.svg",
-  "./icon-128.png": "./assets/icon-128.png",
-  "./icon-256.png": "./assets/icon-256.png",
-}
-// dist/ holds one self-contained bundle per entry, and nothing else (scripts/build.mjs).
-const DIST = ["index.js", "tui.js"]
-// The tested OpenCode line. The host provides @opencode/plugin, OpenTUI and Solid, so the package declares no peers.
-const HOST_RANGE = ">=2.4.1 <2.5.0"
-const HOST_DEV_PIN = "2.4.1"
-const ABSENT_FIELDS = ["dependencies", "optionalDependencies", "bundleDependencies", "bundledDependencies", "peerDependencies", "peerDependenciesMeta", "engines", "overrides"]
-const LIFECYCLE_SCRIPTS = ["preinstall", "install", "postinstall", "preprepare", "prepare", "postprepare", "prepublish", "prepublishOnly", "prepack", "postpack", "publish", "postpublish"]
 
 const stages = {
   typecheck: () => run("tsc", ["--noEmit", "-p", "tsconfig.json"]),
-  // Vitest, as opencode-github runs its unit tests (vitest.config.ts defines __PLUGIN_VERSION__ as the build does).
-  unit: () => run("vitest", ["run"]),
-  // The source contract's conformance kit over the declared source: it runs the plugin's own events_list, probe and
-  // scope.suggest against recorded Specter answers and writes reports/conformance-report.json, which must say ok: true.
-  conformance: () => run("bun", ["test", "./test/conformance"]),
-  // The copied release kit's own tests, including the imported check-drift suites. Two suites are skipped: the
-  // "CI: macOS on pushes" self-test, whose pinned fixture asserts the retired multi-runner matrix, and its nested
-  // environment re-run, "the kit tests, whatever". 4b replaces the kit with plugin-kit. Do not edit the pinned test.
-  kit: () => run("node", ["--test", "--test-skip-pattern", "^CI: macOS on pushes|^the kit tests, whatever", "scripts/release-kit.test.mjs"], { env: { KIT_TESTS_NESTED: "1" } }),
   build: () => run("node", ["scripts/build.mjs"]),
-  icons: () => run("node", ["scripts/check-icons.mjs"]),
-  host: host,
+  unit: () => run("vitest", ["run", "test/unit"]),
+  conformance: () => run("vitest", ["run", "test/conformance"]),
+  host: () => run("bun", ["test", "./test/host"]),
   pack: () => run("bun", ["test", "./test/pack"]),
-  forbidden: () => run("node", ["scripts/check-forbidden.mjs"]),
-  copies: () => run("node", ["scripts/check-copies.mjs"]),
-  whitelist: whitelist,
-  actionlint: actionlint,
+  kit: () => run("plugin-kit", ["check"]),
 }
 
 const selected = process.argv.slice(2)
@@ -68,68 +38,12 @@ for (const name of order) {
 }
 console.log(`\n[check] passed: ${order.join(", ")}`)
 
-function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { cwd: options.cwd ?? root, env: { ...env, ...options.env }, stdio: "inherit" })
+function run(command, args) {
+  const result = spawnSync(command, args, { cwd: root, env, stdio: "inherit" })
   if (result.error?.code === "ENOENT") {
     console.error(`${command} was not found. Run npm ci first; install Bun from https://bun.sh if bun is missing.`)
     return 127
   }
   if (result.error) throw result.error
   return result.status ?? 1
-}
-
-/**
- * The host suite on the one tested release, the locked @opencode/sdk for HOST_DEV_PIN. The single entry in
- * TESTED_HOSTS must be that pin: there is no matrix and no second SDK install.
- */
-function host() {
-  if (TESTED_HOSTS.length !== 1 || TESTED_HOSTS[0] !== HOST_DEV_PIN) {
-    console.error(`[check] TESTED_HOSTS must be exactly ["${HOST_DEV_PIN}"], found ${JSON.stringify(TESTED_HOSTS)}.`)
-    return 1
-  }
-  console.log(`\n[check] host on @opencode/sdk ${HOST_DEV_PIN}`)
-  return run("bun", ["test", "./test/host"])
-}
-
-/**
- * The workflows are parsed as workflows, not as YAML: `actionlint` catches a `${{ }}` that only exists in some
- * contexts, which makes GitHub reject the whole file and run nothing. This is a local courtesy only: CI does not
- * install actionlint, so the stage passes when the tool is absent.
- */
-function actionlint() {
-  const probe = spawnSync("actionlint", ["-version"], { encoding: "utf8" })
-  if (probe.error?.code === "ENOENT") {
-    console.log("actionlint is not on PATH, so the workflow check was skipped; CI does not install it.")
-    return 0
-  }
-  return run("actionlint", ["-color"])
-}
-
-function whitelist() {
-  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-  // No "private" check: only the release workflow's guard checks it.
-  const problems = []
-  if (JSON.stringify(pkg.files) !== JSON.stringify(FILES)) problems.push(`"files" must be exactly ${JSON.stringify(FILES)}.`)
-  for (const field of ABSENT_FIELDS) if (field in pkg) problems.push(`Remove "${field}": the package ships no runtime dependencies, no host peers and no engine pins.`)
-  for (const script of LIFECYCLE_SCRIPTS) if (pkg.scripts?.[script] !== undefined) problems.push(`Remove the "${script}" script: OpenCode installs with lifecycle scripts disabled.`)
-  if (pkg.opencode?.host !== HOST_RANGE) problems.push(`"opencode.host" must be "${HOST_RANGE}", the tested OpenCode line.`)
-  for (const name of ["@opencode/client", "@opencode/plugin", "@opencode/sdk"]) {
-    if (pkg.devDependencies?.[name] !== HOST_DEV_PIN) problems.push(`devDependency "${name}" must be exactly ${HOST_DEV_PIN}, the tested host.`)
-  }
-  const exportsSeen = Object.keys(pkg.exports ?? {})
-  for (const key of Object.keys(EXPORTS)) if (!exportsSeen.includes(key)) problems.push(`"exports" is missing "${key}".`)
-  for (const key of exportsSeen) {
-    const want = EXPORTS[key]
-    if (!want) { problems.push(`"exports" must not contain "${key}".`); continue }
-    // No declaration files ship: nothing consumes the plugin's types.
-    if (JSON.stringify(pkg.exports[key]) !== JSON.stringify(want)) problems.push(`"exports"["${key}"] must be ${JSON.stringify(want)}.`)
-  }
-  for (const field of ["main", "types", "module", "bin"]) if (field in pkg) problems.push(`Remove "${field}": "exports" is the only entry map.`)
-  if (pkg.scripts?.build !== "node scripts/check.mjs build") problems.push(`"scripts"."build" must be "node scripts/check.mjs build", which runs the esbuild bundle.`)
-  const dist = join(root, "dist")
-  const built = existsSync(dist) ? readdirSync(dist).sort() : DIST
-  if (JSON.stringify(built) !== JSON.stringify(DIST)) problems.push(`dist/ must hold exactly ${DIST.join(" and ")}, found ${built.join(", ")}. Run npm run build.`)
-  for (const problem of problems) console.error(`package: ${problem}`)
-  if (!problems.length) console.log("package.json and dist/ match the approved package shape.")
-  return problems.length ? 1 : 0
 }

@@ -1,27 +1,38 @@
 # Changelog
 
-All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.0.0 (unreleased)
+## [0.0.0]
 
-Phase 4a of the plugin-family rebuild: the repository at its new name, on OpenCode 2.4.1, with the legacy Jelly paths
-removed. The plugin-contract v0 adoption, accounts, releases and the full documentation come in phase 4b.
+The first release: the repository at its new name, on OpenCode 2.4.1, rebuilt on plugin-contract v0. It is ready for
+`v0.0.0`, which the maintainer cuts after this tree lands.
+
+### Added
+
+- The `capabilities` manifest: the plugin `specter`, accounts through Specter's hosted MCP server, one events source
+  (`specter.saved`, metered per company) and the seven methods, including Specter's pass-through MCP tools as `mcp:*`.
+- Accounts: several aliases at once, each a separate `specter`/`specter-<alias>` MCP sign-in, plus the separate
+  `specter-team` integration for the team's API key. The plugin's own tools are `accounts: none` and always use the team
+  key.
+- Every method on every door through one `register` call: the agent tool, Code Mode and RPC.
+- `status` from the contract's status builder, `probe` over the team key's fingerprint, and `events_list` over the
+  saved-search feed with a cursor bound to plugin, source, account and scope.
+- The saved-search feed keeps a compatible cursor for 60 days, answers one `gap` when Specter's window has passed, and
+  holds its cursor when a page is cut or malformed.
+- Unit, conformance (two synthetic accounts), real 2.4.1 host and pack suites; `plugin-kit check` in CI.
 
 ### Changed
 
-- Renamed to `@we-the-rebel-alliance/specter-plugin`; the version restarts at `0.0.0`, so no install tag exists yet.
-- Requires OpenCode `>=2.4.1 <2.5.0`, tested on `2.4.1` only. The host check derives both bounds from the one range.
-- One namespace line for every `access` value: the access level is enforced by the permission rules and shown in
-  status, not repeated in fixed context.
-- The `specter` skill description is within the 300-character budget; `specter-write` keeps its 282-character one.
+- The package is `@we-the-rebel-alliance/specter-plugin` and the plugin id, tool namespace and RPC id are `specter`.
+- `get_company`, `saved_search_results` and `events_list` are reads with `effect: ask`: they spend the team's credits and
+  ask before running at every access level.
+- The copied kit is deleted; `plugin-kit` runs conformance, generated docs, forbidden patterns and the doc file set, and
+  `scripts/` holds only this plugin's build and check.
 
 ### Removed
 
-- `docs/jelly.md`, the Jelly declaration tests and every Jelly-only paragraph from the README, docs and skills. The
-  `jelly` and `sources` package.json keys and the hash-pinned kit copies stay until phase 4b replaces them.
-
-### Fixed
-
-- The host harness answers OpenCode 2.4.1's `server/discover` probe before the legacy `initialize`, and still proves
-  the unauthenticated attempt carries no token.
-- The source-contract dev pin names the `v0.3.0` commit, because phase 3 deleted the tag; `npm ci` resolves it.
+- The old tools RPC, the manual permission defaults, the manual status RPC and TUI, the contract-1 code, the old
+  family-only package keys (`sources`, `opencode` and the app block), and the copied release, drift, copies, icons,
+  forbidden, tested-hosts, capture-tools, native-manifest and changelog scripts.
