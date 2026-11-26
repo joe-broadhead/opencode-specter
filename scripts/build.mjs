@@ -41,6 +41,13 @@ if (unexpected.length > 0) throw new Error(`dist/index.js imports modules that a
 function noticeOf(metafile) {
   const inputs = Object.keys(metafile.inputs)
   const packages = new Set(inputs.flatMap((input) => /node_modules\/((?:@[^/]+\/)?[^/]+)\//.exec(input)?.[1] ?? []))
+  // A bundled dist can inline its own dependencies; plugin-contract's chunks name the original module in a comment
+  // (`// node_modules/zod/v4/...`). Those packages are redistributed by this bundle too.
+  for (const input of inputs) {
+    if (!input.startsWith("node_modules/")) continue
+    const text = readFileSync(join(root, input), "utf8")
+    for (const match of text.matchAll(/\/\/\s*node_modules\/((?:@[^/\s]+\/)?[^/\s]+)\//g)) packages.add(match[1])
+  }
   const sections = [...packages].sort().map((name) => {
     const dir = join(root, "node_modules", name)
     const { version, license } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"))
